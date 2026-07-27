@@ -1,0 +1,107 @@
+@import "tailwindcss";
+
+@layer utilities {
+  .tabular-nums {
+    font-variant-numeric: tabular-nums;
+  }
+}
+
+/* Custom Scrollbars for dense editorial dashboard feel */
+::-webkit-scrollbar {
+  width: 5px;
+  height: 5px;
+}
+::-webkit-scrollbar-track {
+  background: #121415;
+}
+::-webkit-scrollbar-thumb {
+  background: #333536;
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #494c4f;
+}
+
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+/* Material symbols filled variations */
+.material-symbols-filled {
+  font-variation-settings: 'FILL' 1, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+}
+
+/* Leaflet dark theme tweaks */
+.leaflet-container {
+  background-color: #0b0d0e !important;
+  font-family: 'Inter', sans-serif !important;
+}
+
+.leaflet-control-zoom {
+  border: 1px solid #2D3034 !important;
+  background-color: #16191C !important;
+  border-radius: 4px !important;
+  overflow: hidden;
+}
+
+.leaflet-control-zoom-in, .leaflet-control-zoom-out {
+  background-color: #16191C !important;
+  color: #e2e2e3 !important;
+  border-bottom: 1px solid #2D3034 !important;
+}
+
+.leaflet-control-zoom-in:hover, .leaflet-control-zoom-out:hover {
+  background-color: #282a2b !important;
+  color: #ffffff !important;
+}
+
+.leaflet-popup-content-wrapper {
+  background: #16191C !important;
+  color: #e2e2e3 !important;
+  border: 1px solid #2D3034 !important;
+  border-radius: 6px !important;
+  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.7) !important;
+}
+
+.leaflet-popup-tip {
+  background: #16191C !important;
+  border: 1px solid #2D3034 !important;
+}
+
+/* Pulse keyframes for active fire markers */
+@keyframes fire-pulse {
+  0% {
+    box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.7);
+  }
+  70% {
+    box-shadow: 0 0 0 12px rgba(239, 68, 68, 0);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(239, 68, 68, 0);
+  }
+}
+
+@keyframes resolucao-pulse {
+  0% {
+    box-shadow: 0 0 0 0 rgba(251, 191, 36, 0.7);
+  }
+  70% {
+    box-shadow: 0 0 0 12px rgba(251, 191, 36, 0);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(251, 191, 36, 0);
+  }
+}
+
+.pulse-fire {
+  animation: fire-pulse 2s infinite;
+}
+
+.pulse-resolucao {
+  animation: resolucao-pulse 2.5s infinite;
+}
+
