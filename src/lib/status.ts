@@ -16,7 +16,14 @@
 
 export interface StatusMeta {
   code: number;
-  /** Libellé portugais affiché tel quel. */
+  /**
+   * Libellé BRUT tel que renvoyé par la source, en portugais.
+   *
+   * Ne pas l'afficher directement : passer par `t('status.<code>')`. Ce champ ne
+   * sert que de repli de diagnostic pour un code inconnu du registre. C'est
+   * précisément parce que l'indexation se fait sur `code` et non sur le texte que
+   * les statuts sont traduisibles, contrairement aux toponymes.
+   */
   label: string;
   /** Couleur imposée (voir décision ci-dessus). */
   color: string;

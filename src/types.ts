@@ -155,5 +155,17 @@ export interface DistrictIntensity {
   burnedHa: number;
 }
 
+/**
+ * Périmètre affiché.
+ *
+ * `portugal` : données opérationnelles de l'ANEPC (effectifs, statuts, météo).
+ * `europe`   : détections satellite, seule source disponible hors du Portugal.
+ *
+ * Deux modes plutôt qu'un seul, parce qu'aucun équivalent opérationnel n'existe
+ * en Espagne ni en France. Les mélanger afficherait « 0 opérationnel » sur tout
+ * l'étranger et laisserait croire qu'il y brûle moins.
+ */
+export type ViewScope = 'portugal' | 'europe';
+
 export type ViewTab = 'dashboard' | 'analytics' | 'watch-zones';
 export type MapTileLayer = 'dark' | 'satellite' | 'terrain';

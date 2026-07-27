@@ -4,6 +4,7 @@ import { Incident, WatchZone, MapTileLayer, SatelliteDetection } from '../types'
 import { resolveStatus } from '../lib/status';
 import { formatTimeAgo } from '../lib/time';
 import { SatelliteHeatLayer } from './map/SatelliteHeatLayer';
+import { useI18n } from '../i18n/context';
 
 /**
  * Seuil de bascule nappe → anneaux individuels.
@@ -59,6 +60,7 @@ export const InteractiveMap: React.FC<InteractiveMapProps> = ({
   const canvasRendererRef = useRef<L.Canvas | null>(null);
   const pickerMarkerRef = useRef<L.Circle | null>(null);
   const heatLayerRef = useRef<SatelliteHeatLayer | null>(null);
+  const { t, intlTag } = useI18n();
   const [zoom, setZoom] = useState(7);
   /** Incrémenté à chaque déplacement : redéclenche le filtrage des anneaux. */
   const [moveTick, setMoveTick] = useState(0);
@@ -334,18 +336,21 @@ export const InteractiveMap: React.FC<InteractiveMapProps> = ({
         interactive: true,
       });
 
-      const detectedAgo = formatTimeAgo(detection.detectedAt);
+      const detectedAgo = formatTimeAgo(detection.detectedAt, intlTag, t('time.justNow'));
       ring.bindTooltip(
-        `<div style="font-weight:700;color:#c4b5fd">Deteção por satélite</div>
-         <div style="color:#e2e2e3">${detection.frpMw.toFixed(1)} MW · ${detection.passes} passagem(ns)</div>
+        `<div style="font-weight:700;color:#c4b5fd">${t('satellite.tooltipTitle')}</div>
+         <div style="color:#e2e2e3">${t('satellite.tooltipPower', {
+           frp: detection.frpMw.toFixed(1),
+           passes: detection.passes,
+         })}</div>
          <div style="color:#9ca3af">${detection.satellites.join(', ')} · ${detectedAgo}</div>
-         <div style="color:#9ca3af;font-style:italic;margin-top:4px">Não confirmado no terreno</div>`,
+         <div style="color:#9ca3af;font-style:italic;margin-top:4px">${t('satellite.tooltipUnconfirmed')}</div>`,
         { className: 'satellite-tooltip', direction: 'top' }
       );
 
       satelliteGroupRef.current?.addLayer(ring);
     });
-  }, [satelliteDetections, showSatellite, isPickerMode, zoom, moveTick]);
+  }, [satelliteDetections, showSatellite, isPickerMode, zoom, moveTick, t, intlTag]);
 
   // Render Watch Zones
   useEffect(() => {

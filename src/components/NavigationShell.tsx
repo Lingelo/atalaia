@@ -1,6 +1,8 @@
 import React from 'react';
-import { ViewTab } from '../types';
+import { ViewTab, ViewScope } from '../types';
 import { formatTimeAgo } from '../lib/time';
+import { useI18n } from '../i18n/context';
+import { ScopeSwitcher } from './ScopeSwitcher';
 
 interface NavigationShellProps {
   activeTab: ViewTab;
@@ -15,6 +17,10 @@ interface NavigationShellProps {
   lastUpdatedAt: number | null;
   isRefreshing: boolean;
   onRefresh: () => void;
+  scope: ViewScope;
+  onChangeScope: (scope: ViewScope) => void;
+  /** Libellés des quatre tuiles : ils diffèrent selon le périmètre affiché. */
+  statLabels: [string, string, string, string];
 }
 
 export const NavigationShell: React.FC<NavigationShellProps> = ({
@@ -24,44 +30,54 @@ export const NavigationShell: React.FC<NavigationShellProps> = ({
   lastUpdatedAt,
   isRefreshing,
   onRefresh,
+  scope,
+  onChangeScope,
+  statLabels,
 }) => {
+  const { t, n, intlTag } = useI18n();
   return (
     <>
       {/* Desktop Top Right Stat Bar (Floats above map on Level 2) */}
-      <div className="hidden lg:flex fixed top-4 right-6 z-[400] bg-[#16191C]/95 border border-[#2D3034] rounded shadow-2xl backdrop-blur-md divide-x divide-[#2D3034]">
+      <div className="hidden lg:flex fixed top-4 right-6 z-[400] bg-[#16191C]/95 border border-[#2D3034] rounded shadow-2xl backdrop-blur-md divide-x divide-[#2D3034] items-stretch">
+        {/* Le sélecteur ouvre la barre : il dit CE QUE les chiffres décrivent,
+            donc il doit être lu avant eux. */}
+        <div className="px-3 py-2.5 flex items-center">
+          <ScopeSwitcher scope={scope} onChangeScope={onChangeScope} />
+        </div>
+
         <div className="px-5 py-2.5 flex flex-col justify-center items-start">
           <span className="font-['Inter'] text-[24px] leading-none text-[#e2e2e3] font-bold tabular-nums tracking-tight">
-            {totalStats.activeCount}
+            {n(totalStats.activeCount)}
           </span>
           <span className="font-['Inter'] text-[11px] text-[#e5bdb9] uppercase tracking-wider mt-1">
-            ocorrências ativas
+            {statLabels[0]}
           </span>
         </div>
 
         <div className="px-5 py-2.5 flex flex-col justify-center items-start">
           <span className="font-['Inter'] text-[24px] leading-none text-[#e2e2e3] font-bold tabular-nums tracking-tight">
-            {totalStats.operacionais.toLocaleString()}
+            {n(totalStats.operacionais)}
           </span>
           <span className="font-['Inter'] text-[11px] text-[#e5bdb9] uppercase tracking-wider mt-1">
-            operacionais
+            {statLabels[1]}
           </span>
         </div>
 
         <div className="px-5 py-2.5 flex flex-col justify-center items-start">
           <span className="font-['Inter'] text-[24px] leading-none text-[#e2e2e3] font-bold tabular-nums tracking-tight">
-            {totalStats.veiculos}
+            {n(totalStats.veiculos)}
           </span>
           <span className="font-['Inter'] text-[11px] text-[#e5bdb9] uppercase tracking-wider mt-1">
-            veículos
+            {statLabels[2]}
           </span>
         </div>
 
         <div className="px-5 py-2.5 flex flex-col justify-center items-start">
           <span className="font-['Inter'] text-[24px] leading-none text-[#e2e2e3] font-bold tabular-nums tracking-tight">
-            {totalStats.meiosAereos}
+            {n(totalStats.meiosAereos)}
           </span>
           <span className="font-['Inter'] text-[11px] text-[#e5bdb9] uppercase tracking-wider mt-1">
-            meios aéreos
+            {statLabels[3]}
           </span>
         </div>
 
@@ -72,7 +88,7 @@ export const NavigationShell: React.FC<NavigationShellProps> = ({
             onClick={onRefresh}
             disabled={isRefreshing}
             className="px-3 py-1.5 rounded text-xs font-semibold flex items-center gap-1.5 transition-all bg-[#282a2b] text-[#ffb3ad] hover:bg-[#333536] border border-[#333536] disabled:opacity-60"
-            title="Atualizar agora"
+            title={t('stats.refreshNow')}
           >
             <span
               className={`material-symbols-outlined text-[16px] ${isRefreshing ? 'animate-spin' : ''}`}
@@ -80,10 +96,10 @@ export const NavigationShell: React.FC<NavigationShellProps> = ({
               {isRefreshing ? 'progressbar' : 'refresh'}
             </span>
             {isRefreshing
-              ? 'A atualizar…'
+              ? t('stats.refreshing')
               : lastUpdatedAt
-                ? `Atualizado ${formatTimeAgo(lastUpdatedAt)}`
-                : 'Atualizar'}
+                ? t('stats.updated', { time: formatTimeAgo(lastUpdatedAt, intlTag, t('time.justNow')) })
+                : t('stats.refresh')}
           </button>
         </div>
       </div>
@@ -98,7 +114,7 @@ export const NavigationShell: React.FC<NavigationShellProps> = ({
           }`}
         >
           <span className="material-symbols-outlined text-[22px]">map</span>
-          <span className="font-['Inter'] text-[11px] font-semibold mt-0.5">Map</span>
+          <span className="font-['Inter'] text-[11px] font-semibold mt-0.5">{t('nav.map')}</span>
         </button>
 
         <button
@@ -109,7 +125,7 @@ export const NavigationShell: React.FC<NavigationShellProps> = ({
           }`}
         >
           <span className="material-symbols-outlined text-[22px]">analytics</span>
-          <span className="font-['Inter'] text-[11px] font-semibold mt-0.5">Stats</span>
+          <span className="font-['Inter'] text-[11px] font-semibold mt-0.5">{t('nav.stats')}</span>
         </button>
 
         <button
@@ -120,7 +136,7 @@ export const NavigationShell: React.FC<NavigationShellProps> = ({
           }`}
         >
           <span className="material-symbols-outlined text-[22px]">notifications_active</span>
-          <span className="font-['Inter'] text-[11px] font-semibold mt-0.5">Alerts</span>
+          <span className="font-['Inter'] text-[11px] font-semibold mt-0.5">{t('nav.alerts')}</span>
         </button>
       </nav>
     </>

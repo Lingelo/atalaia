@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useI18n } from '../i18n/context';
 import {
   MONTHLY_HISTORICAL_STATS,
   TOP_MUNICIPALITIES,
@@ -7,6 +8,7 @@ import {
 } from '../data/mockData';
 
 export const AnalyticsView: React.FC = () => {
+  const { t, n } = useI18n();
   const [selectedYear, setSelectedYear] = useState<number>(2024);
   const [districtFilter, setDistrictFilter] = useState<string>('Todos');
   const [natureFilter, setNatureFilter] = useState<string>('Florestal');
@@ -18,10 +20,17 @@ export const AnalyticsView: React.FC = () => {
 
   return (
     <div className="flex-grow p-4 md:p-8 flex flex-col gap-6 w-full max-w-[1440px] mx-auto overflow-y-auto">
+      {/* Ces vues affichent des données inventées. L'écrire à l'écran, et pas
+          seulement dans le code, évite qu'on les prenne pour des données réelles. */}
+      <div className="flex items-start gap-2 rounded border border-[#f0a500]/40 bg-[#f0a500]/10 px-3 py-2.5">
+        <span className="material-symbols-outlined text-[18px] text-[#f0a500] shrink-0">science</span>
+        <p className="font-['Inter'] text-[12px] leading-snug text-[#f0d9a0]">{t('analytics.mockWarning')}</p>
+      </div>
+
       {/* Page Title & Filter Bar */}
       <div className="flex flex-col lg:flex-row lg:items-end justify-between gap-4 pb-4 border-b border-[#333536]">
         <div>
-          <h2 className="font-['Inter'] text-[28px] font-semibold text-[#e2e2e3]">Histórico</h2>
+          <h2 className="font-['Inter'] text-[28px] font-semibold text-[#e2e2e3]">{t('analytics.title')}</h2>
           <p className="font-['Inter'] text-[14px] text-[#e5bdb9]">Archived incidents since 2018</p>
         </div>
 
@@ -45,7 +54,7 @@ export const AnalyticsView: React.FC = () => {
 
           {/* District Filter */}
           <div className="flex flex-col gap-1 min-w-[140px]">
-            <label className="text-[12px] font-semibold text-[#e5bdb9] uppercase tracking-wider">Distrito</label>
+            <label className="text-[12px] font-semibold text-[#e5bdb9] uppercase tracking-wider">{t('analytics.district')}</label>
             <select
               value={districtFilter}
               onChange={(e) => setDistrictFilter(e.target.value)}
@@ -53,7 +62,8 @@ export const AnalyticsView: React.FC = () => {
             >
               {districtsList.map((d) => (
                 <option key={d} value={d}>
-                  {d}
+                  {/* Les toponymes ne se traduisent pas ; seul « Todos » est de l'habillage. */}
+                  {d === 'Todos' ? t('list.all') : d}
                 </option>
               ))}
             </select>
@@ -61,15 +71,21 @@ export const AnalyticsView: React.FC = () => {
 
           {/* Nature Filter */}
           <div className="flex flex-col gap-1 min-w-[140px]">
-            <label className="text-[12px] font-semibold text-[#e5bdb9] uppercase tracking-wider">Natureza</label>
+            <label className="text-[12px] font-semibold text-[#e5bdb9] uppercase tracking-wider">{t('detail.nature')}</label>
             <select
               value={natureFilter}
               onChange={(e) => setNatureFilter(e.target.value)}
               className="bg-[#1e2021] text-[#e2e2e3] border border-[#333536] rounded px-3 py-2 text-[14px] focus:outline-none focus:border-[#ffb3ad]"
             >
-              {naturesList.map((n) => (
-                <option key={n} value={n}>
-                  {n}
+              {naturesList.map((nat) => (
+                <option key={nat} value={nat}>
+                  {nat === 'Todos'
+                    ? t('list.all')
+                    : nat === 'Mato'
+                      ? t('nature.mato')
+                      : nat === 'Agrícola'
+                        ? t('nature.agricola')
+                        : t('nature.povoamento')}
                 </option>
               ))}
             </select>
@@ -235,7 +251,7 @@ export const AnalyticsView: React.FC = () => {
 
         {/* District Intensity Choropleth Card */}
         <div className="bg-[#121415] col-span-12 lg:col-span-4 p-6 flex flex-col min-h-[380px]">
-          <h3 className="text-[20px] font-semibold text-[#e2e2e3] mb-4">Intensidade por Distrito</h3>
+          <h3 className="text-[20px] font-semibold text-[#e2e2e3] mb-4">{t('analytics.district')}</h3>
 
           <div className="flex-1 relative bg-[#0c0e0f] rounded border border-[#333536] overflow-hidden flex flex-col justify-between p-4">
             <div className="space-y-2.5 overflow-y-auto max-h-[260px] pr-1">
@@ -246,7 +262,7 @@ export const AnalyticsView: React.FC = () => {
                 >
                   <div>
                     <div className="text-[14px] font-semibold text-[#e2e2e3]">{d.district}</div>
-                    <div className="text-[12px] text-[#e5bdb9]">{d.incidentsCount.toLocaleString()} registos</div>
+                    <div className="text-[12px] text-[#e5bdb9]">{t('analytics.records', { count: n(d.incidentsCount) })}</div>
                   </div>
 
                   <div className="flex items-center gap-2">
@@ -309,7 +325,7 @@ export const AnalyticsView: React.FC = () => {
           </div>
 
           <div className="mt-6 pt-3 border-t border-[#333536] flex justify-between text-[12px] text-[#e5bdb9]">
-            <span>Município</span>
+            <span>{t('analytics.district')}</span>
             <span>Hectares (ha)</span>
           </div>
         </div>

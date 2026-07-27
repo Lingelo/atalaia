@@ -2,6 +2,8 @@ import React, { useMemo, useState } from 'react';
 import { Incident } from '../types';
 import { formatDateTime } from '../lib/time';
 import { resolveStatus } from '../lib/status';
+import { useI18n } from '../i18n/context';
+import type { TranslationKey } from '../i18n/pt';
 
 /**
  * Convertit la ventilation ICNF (hectares absolus) en parts affichables.
@@ -9,7 +11,7 @@ import { resolveStatus } from '../lib/status';
  * Retourne null si la donnée est absente OU si le total est nul : une barre
  * empilée à 0 % de partout n'informe pas, elle décore.
  */
-function useBurnedAreaParts(incident: Incident) {
+function useBurnedAreaParts(incident: Incident, labels: [string, string, string]) {
   return useMemo(() => {
     const breakdown = incident.burnedBreakdown;
     const totalHa = incident.burnedAreaHa;
@@ -20,12 +22,12 @@ function useBurnedAreaParts(incident: Incident) {
     return {
       totalHa,
       parts: [
-        { label: 'Povoamento florestal', pct: toPct(breakdown.povoamentoHa), barClass: 'bg-[#ffb3ad]' },
-        { label: 'Mato', pct: toPct(breakdown.matoHa), barClass: 'bg-[#0079a1]' },
-        { label: 'Agrícola', pct: toPct(breakdown.agricolaHa), barClass: 'bg-[#ac8885]' },
+        { label: labels[0], pct: toPct(breakdown.povoamentoHa), barClass: 'bg-[#ffb3ad]' },
+        { label: labels[1], pct: toPct(breakdown.matoHa), barClass: 'bg-[#0079a1]' },
+        { label: labels[2], pct: toPct(breakdown.agricolaHa), barClass: 'bg-[#ac8885]' },
       ],
     };
-  }, [incident.burnedBreakdown, incident.burnedAreaHa]);
+  }, [incident.burnedBreakdown, incident.burnedAreaHa, labels]);
 }
 
 interface IncidentDetailPanelProps {
@@ -41,16 +43,42 @@ export const IncidentDetailPanel: React.FC<IncidentDetailPanelProps> = ({
   onFocusOnMap,
   onToggleFollow,
 }) => {
+  const { t, n, intlTag } = useI18n();
   const [copied, setCopied] = useState(false);
-  const burned = useBurnedAreaParts(incident);
+
+  const burnedLabels = useMemo<[string, string, string]>(
+    () => [t('detail.forestStand'), t('detail.scrub'), t('detail.agricultural')],
+    [t]
+  );
+  const burned = useBurnedAreaParts(incident, burnedLabels);
+
+  const translateNature = (nature: string): string => {
+    const normalised = nature.toLowerCase();
+    if (normalised.includes('mato')) return t('nature.mato');
+    if (normalised.includes('povoamento')) return t('nature.povoamento');
+    if (normalised.includes('agrícola') || normalised.includes('agricola'))
+      return t('nature.agricola');
+    return nature;
+  };
+
+  const meta = resolveStatus(incident.statusCode, incident.status);
+  const statusLabel =
+    meta.code >= 1 && meta.code <= 10
+      ? t(`status.${meta.code}` as TranslationKey)
+      : t('status.unknown', { code: meta.code });
 
   // Couleur de statut : registre unique (src/lib/status.ts). Auparavant ce
   // composant colorait « Em Resolução » en cyan alors que la carte et la liste le
   // peignaient en ambre — même statut, deux couleurs selon l'écran.
-  const statusColor = resolveStatus(incident.statusCode, incident.status).color;
+  const statusColor = meta.color;
 
   const handleShare = () => {
-    const text = `Incêndio em ${incident.title} (${incident.locationName}) - Status: ${incident.status} - Operacionais: ${incident.operacionais}`;
+    const text = t('detail.shareText', {
+      title: incident.title,
+      location: incident.locationName,
+      status: statusLabel,
+      personnel: incident.operacionais,
+    });
     if (navigator.share) {
       navigator.share({ title: incident.title, text: text, url: window.location.href }).catch(() => {});
     } else {
@@ -81,7 +109,7 @@ export const IncidentDetailPanel: React.FC<IncidentDetailPanelProps> = ({
               className="font-['Inter'] text-[12px] font-semibold uppercase tracking-wider"
               style={{ color: statusColor }}
             >
-              {incident.status}
+              {statusLabel}
             </span>
           </div>
 
@@ -89,7 +117,7 @@ export const IncidentDetailPanel: React.FC<IncidentDetailPanelProps> = ({
           <button
             type="button"
             onClick={onClose}
-            aria-label="Fechar painel"
+            aria-label={t('detail.close')}
             className="p-1 text-[#e5bdb9] hover:text-[#e2e2e3] hover:bg-[#333536] rounded transition-colors"
           >
             <span className="material-symbols-outlined">close</span>
@@ -118,7 +146,7 @@ export const IncidentDetailPanel: React.FC<IncidentDetailPanelProps> = ({
               {incident.operacionais}
             </span>
             <span className="font-['Inter'] text-[10px] md:text-[11px] font-semibold text-[#e5bdb9] uppercase tracking-wide leading-tight break-words mt-2">
-              Operacionais
+              {t('detail.personnel')}
             </span>
           </div>
           <div className="flex flex-col p-3 border-r border-[#333536] min-w-0">
@@ -126,7 +154,7 @@ export const IncidentDetailPanel: React.FC<IncidentDetailPanelProps> = ({
               {incident.veiculos}
             </span>
             <span className="font-['Inter'] text-[10px] md:text-[11px] font-semibold text-[#e5bdb9] uppercase tracking-wide leading-tight break-words mt-2">
-              Veículos
+              {t('detail.vehicles')}
             </span>
           </div>
           <div className="flex flex-col p-3 min-w-0">
@@ -134,7 +162,7 @@ export const IncidentDetailPanel: React.FC<IncidentDetailPanelProps> = ({
               {incident.meiosAereos}
             </span>
             <span className="font-['Inter'] text-[10px] md:text-[11px] font-semibold text-[#e5bdb9] uppercase tracking-wide leading-tight break-words mt-2">
-              Meios Aéreos
+              {t('detail.aircraft')}
             </span>
           </div>
         </section>
@@ -146,7 +174,7 @@ export const IncidentDetailPanel: React.FC<IncidentDetailPanelProps> = ({
             kilomètres, le prétendre mesuré sur place serait mentir. */}
         <section>
           <h2 className="font-['Inter'] text-[12px] font-semibold text-[#e5bdb9] uppercase tracking-wider mb-3">
-            Condições no local
+            {t('detail.conditions')}
           </h2>
 
           {incident.weather ? (
@@ -158,7 +186,7 @@ export const IncidentDetailPanel: React.FC<IncidentDetailPanelProps> = ({
                     <span className="text-[14px] font-normal text-[#e5bdb9]"> %</span>
                   </span>
                   <p className="font-['Inter'] text-[10px] font-semibold text-[#e5bdb9] uppercase tracking-wide mt-2">
-                    Humidade
+                    {t('detail.humidity')}
                   </p>
                 </div>
                 <div className="rounded border border-[#333536] bg-[#121415]/60 p-3">
@@ -167,23 +195,23 @@ export const IncidentDetailPanel: React.FC<IncidentDetailPanelProps> = ({
                     <span className="text-[14px] font-normal text-[#e5bdb9]"> km/h</span>
                   </span>
                   <p className="font-['Inter'] text-[10px] font-semibold text-[#e5bdb9] uppercase tracking-wide mt-2">
-                    Vento {incident.weather.direccVento}
+                    {t('detail.wind', { direction: incident.weather.direccVento })}
                   </p>
                 </div>
               </div>
 
               <ul className="text-[13px] flex gap-4 mb-2">
                 <li className="text-[#e5bdb9]">
-                  Temperatura{' '}
+                  {t('detail.temperature')}{' '}
                   <span className="text-[#e2e2e3] font-medium tabular-nums">
-                    {incident.weather.temperatura.toLocaleString('pt-PT', {
+                    {n(incident.weather.temperatura, {
                       maximumFractionDigits: 1,
                     })}{' '}
                     °C
                   </span>
                 </li>
                 <li className="text-[#e5bdb9]">
-                  Precipitação{' '}
+                  {t('detail.precipitation')}{' '}
                   <span className="text-[#e2e2e3] font-medium tabular-nums">
                     {incident.weather.precAcumulada} mm
                   </span>
@@ -191,14 +219,16 @@ export const IncidentDetailPanel: React.FC<IncidentDetailPanelProps> = ({
               </ul>
 
               <p className="font-['Inter'] text-[12px] text-[#e5bdb9]/80 italic">
-                Estação de {incident.weather.stationLocation}, a{' '}
-                {Math.round(incident.weather.stationDistance)} km · leitura de{' '}
-                {formatDateTime(Date.parse(incident.weather.date))}
+                {t('detail.weatherSource', {
+                  station: incident.weather.stationLocation,
+                  distance: Math.round(incident.weather.stationDistance),
+                  time: formatDateTime(Date.parse(incident.weather.date), intlTag),
+                })}
               </p>
             </>
           ) : (
             <p className="font-['Inter'] text-[13px] text-[#e5bdb9] italic">
-              Sem estação meteorológica associada a esta ocorrência.
+              {t('detail.noWeather')}
             </p>
           )}
         </section>
@@ -206,7 +236,7 @@ export const IncidentDetailPanel: React.FC<IncidentDetailPanelProps> = ({
         {/* Vertical Timeline: Histórico de Estado */}
         <section>
           <h2 className="font-['Inter'] text-[12px] font-semibold text-[#e5bdb9] uppercase tracking-wider mb-4">
-            Histórico de Estado
+            {t('detail.statusHistory')}
           </h2>
           <div className="relative pl-6 space-y-5 before:absolute before:inset-y-0 before:left-[11px] before:w-[1px] before:bg-[#333536]">
             {incident.history && incident.history.length > 0 ? (
@@ -233,7 +263,7 @@ export const IncidentDetailPanel: React.FC<IncidentDetailPanelProps> = ({
                 );
               })
             ) : (
-              <div className="text-sm text-[#e5bdb9]">Histórico indisponível</div>
+              <div className="text-sm text-[#e5bdb9]">{t('detail.noHistory')}</div>
             )}
           </div>
         </section>
@@ -243,13 +273,13 @@ export const IncidentDetailPanel: React.FC<IncidentDetailPanelProps> = ({
         {/* Área Ardida Estimada */}
         <section>
           <h2 className="font-['Inter'] text-[12px] font-semibold text-[#e5bdb9] uppercase tracking-wider mb-3">
-            Área Ardida Estimada
+            {t('detail.burnedArea')}
           </h2>
           {burned ? (
             <>
               <div className="mb-2 flex justify-between items-baseline">
                 <span className="font-['Inter'] text-[24px] font-semibold text-[#e2e2e3] tabular-nums">
-                  {burned.totalHa.toLocaleString('pt-PT', { maximumFractionDigits: 1 })}{' '}
+                  {n(burned.totalHa, { maximumFractionDigits: 1 })}{' '}
                   <span className="font-['Inter'] text-[14px] font-normal text-[#e5bdb9]">ha</span>
                 </span>
               </div>
@@ -282,7 +312,7 @@ export const IncidentDetailPanel: React.FC<IncidentDetailPanelProps> = ({
             /* L'ICNF n'estime pas systématiquement la surface — c'était même le cas
                du plus gros feu actif au relevé. Afficher 0 ha serait un mensonge. */
             <p className="font-['Inter'] text-[13px] text-[#e5bdb9] italic">
-              Sem dados de área ardida para esta ocorrência.
+              {t('detail.noBurnedArea')}
             </p>
           )}
         </section>
@@ -292,27 +322,30 @@ export const IncidentDetailPanel: React.FC<IncidentDetailPanelProps> = ({
         {/* Detalhes Técnicos */}
         <section>
           <h2 className="font-['Inter'] text-[12px] font-semibold text-[#e5bdb9] uppercase tracking-wider mb-3">
-            Detalhes Técnicos
+            {t('detail.technical')}
           </h2>
           <ul className="flex flex-col text-[14px]">
             <li className="flex justify-between py-2 border-b border-[#333536]/50">
-              <span className="text-[#e5bdb9]">Natureza</span>
-              <span className="text-[#e2e2e3] font-medium">{incident.nature}</span>
+              <span className="text-[#e5bdb9]">{t('detail.nature')}</span>
+              {/* La `natureza` arrive en portugais depuis la source. Trois valeurs
+                  seulement, donc une table suffit ; toute autre valeur est
+                  affichée telle quelle plutôt que masquée. */}
+              <span className="text-[#e2e2e3] font-medium">{translateNature(incident.nature)}</span>
             </li>
             <li className="flex justify-between py-2 border-b border-[#333536]/50">
-              <span className="text-[#e5bdb9]">Altitude Estimada</span>
+              <span className="text-[#e5bdb9]">{t('detail.altitude')}</span>
               <span className="text-[#e2e2e3] font-medium tabular-nums">
                 {incident.altitude === null ? '—' : `${Math.round(incident.altitude)} m`}
               </span>
             </li>
             <li className="flex justify-between py-2 border-b border-[#333536]/50">
-              <span className="text-[#e5bdb9]">Fonte de Alerta</span>
+              <span className="text-[#e5bdb9]">{t('detail.alertSource')}</span>
               <span className="text-[#e2e2e3] font-medium">{incident.alertSource ?? '—'}</span>
             </li>
             <li className="flex justify-between py-2 border-b border-[#333536]/50">
-              <span className="text-[#e5bdb9]">Início</span>
+              <span className="text-[#e5bdb9]">{t('detail.start')}</span>
               <span className="text-[#e2e2e3] font-medium tabular-nums">
-                {formatDateTime(incident.startedAt)}
+                {formatDateTime(incident.startedAt, intlTag)}
               </span>
             </li>
           </ul>
@@ -333,7 +366,7 @@ export const IncidentDetailPanel: React.FC<IncidentDetailPanelProps> = ({
             className="flex-1 py-2.5 px-3 bg-[#282a2b] hover:bg-[#333536] text-[#e2e2e3] font-['Inter'] text-[14px] rounded flex items-center justify-center gap-2 transition-colors border border-[#333536]"
           >
             <span className="material-symbols-outlined text-[18px]">share</span>
-            Partilhar
+            {t('detail.share')}
           </button>
           <button
             type="button"
@@ -341,7 +374,7 @@ export const IncidentDetailPanel: React.FC<IncidentDetailPanelProps> = ({
             className="flex-1 py-2.5 px-3 bg-[#282a2b] hover:bg-[#333536] text-[#e2e2e3] font-['Inter'] text-[14px] rounded flex items-center justify-center gap-2 transition-colors border border-[#333536]"
           >
             <span className="material-symbols-outlined text-[18px]">my_location</span>
-            Ver no mapa
+            {t('detail.viewOnMap')}
           </button>
         </div>
         <button
@@ -356,7 +389,7 @@ export const IncidentDetailPanel: React.FC<IncidentDetailPanelProps> = ({
           <span className="material-symbols-outlined text-[18px] material-symbols-filled">
             {incident.isFollowing ? 'notifications_active' : 'notifications'}
           </span>
-          {incident.isFollowing ? 'A seguir esta zona' : 'Seguir esta zona'}
+          {incident.isFollowing ? t('detail.following') : t('detail.follow')}
         </button>
       </footer>
     </aside>

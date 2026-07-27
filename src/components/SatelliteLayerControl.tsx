@@ -1,5 +1,7 @@
 import React from 'react';
 
+import { useI18n } from '../i18n/context';
+
 interface SatelliteLayerControlProps {
   isOn: boolean;
   onToggle: () => void;
@@ -23,6 +25,8 @@ export const SatelliteLayerControl: React.FC<SatelliteLayerControlProps> = ({
   isLoading,
   detectionCount,
 }) => {
+  const { t, n } = useI18n();
+
   return (
     <div className="absolute top-4 left-4 z-[400] w-[248px] max-w-[calc(100%-2rem)] rounded border border-[#2D3034] bg-[#16191C]/95 backdrop-blur-md shadow-2xl overflow-hidden">
       <button
@@ -39,7 +43,7 @@ export const SatelliteLayerControl: React.FC<SatelliteLayerControlProps> = ({
         />
         <span className="flex-1 min-w-0">
           <span className="block font-['Inter'] text-[13px] font-semibold text-[#e2e2e3]">
-            Deteções por satélite
+            {t('satellite.title')}
           </span>
           <span className="block font-['Inter'] text-[11px] text-[#e5bdb9] tabular-nums">
             {/* « e vizinhança » n'est pas une approximation paresseuse : l'emprise
@@ -47,9 +51,9 @@ export const SatelliteLayerControl: React.FC<SatelliteLayerControlProps> = ({
                 Annoncer « PT, ES, FR » serait faux au premier coup d'œil sur la carte. */}
             {isOn
               ? isLoading
-                ? 'A carregar…'
-                : `${detectionCount.toLocaleString('pt-PT')} focos · PT, ES, FR e vizinhança`
-              : 'Desligado'}
+                ? t('satellite.loading')
+                : t('satellite.count', { count: n(detectionCount) })
+              : t('satellite.off')}
           </span>
         </span>
         <span
@@ -68,13 +72,12 @@ export const SatelliteLayerControl: React.FC<SatelliteLayerControlProps> = ({
       {isOn && (
         <div className="px-3 pb-2.5 pt-0 space-y-1.5">
           <p className="font-['Inter'] text-[11px] leading-snug text-[#e5bdb9]/80">
-            Anomalias térmicas VIIRS (NASA FIRMS), <strong>não confirmadas no terreno</strong>. Podem
-            corresponder a queimadas agrícolas. Não são ocorrências da proteção civil.
+            {t('satellite.disclaimer')}
           </p>
           {/* Sans cette phrase, la bascule densité → foyers reste invisible :
               l'utilisateur n'a aucune raison de deviner qu'il faut zoomer. */}
           <p className="font-['Inter'] text-[11px] leading-snug text-[#8b5cf6]">
-            Aproxime o mapa para ver cada foco em detalhe.
+            {t('satellite.zoomHint')}
           </p>
         </div>
       )}

@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useI18n } from '../i18n/context';
 import { WatchZone, MapTileLayer } from '../types';
 import { InteractiveMap } from './InteractiveMap';
 
@@ -19,6 +20,7 @@ export const WatchZonesView: React.FC<WatchZonesViewProps> = ({
   tileLayerType,
   onChangeTileLayer,
 }) => {
+  const { t } = useI18n();
   const [notificationPermission, setNotificationPermission] = useState<string>(
     typeof window !== 'undefined' && 'Notification' in window ? Notification.permission : 'default'
   );
@@ -76,8 +78,15 @@ export const WatchZonesView: React.FC<WatchZonesViewProps> = ({
     <div className="flex-1 pb-16 md:pb-0 flex flex-col md:flex-row w-full h-full overflow-hidden bg-[#121415]">
       {/* LEFT COLUMN: ALERTS LIST */}
       <section className="w-full md:w-[420px] lg:w-[460px] h-full flex flex-col border-r border-[#333536] bg-[#121415] flex-shrink-0">
-        <div className="p-4 border-b border-[#333536]">
-          <h2 className="font-['Inter'] text-[24px] font-semibold text-[#e2e2e3] mb-3">Alertas</h2>
+        <div className="p-4 border-b border-[#333536] flex flex-col gap-3">
+      {/* Ces vues affichent des données inventées. L'écrire à l'écran, et pas
+          seulement dans le code, évite qu'on les prenne pour des données réelles. */}
+      <div className="flex items-start gap-2 rounded border border-[#f0a500]/40 bg-[#f0a500]/10 px-3 py-2.5">
+        <span className="material-symbols-outlined text-[18px] text-[#f0a500] shrink-0">science</span>
+        <p className="font-['Inter'] text-[12px] leading-snug text-[#f0d9a0]">{t('watch.mockWarning')}</p>
+      </div>
+
+          <h2 className="font-['Inter'] text-[24px] font-semibold text-[#e2e2e3] mb-3">{t('watch.title')}</h2>
 
           {/* Browser Notification Banner */}
           {notificationPermission !== 'granted' && (
@@ -123,7 +132,8 @@ export const WatchZonesView: React.FC<WatchZonesViewProps> = ({
                   {zone.name}
                 </h3>
                 <p className="font-['Inter'] text-[13px] text-[#e5bdb9] mt-0.5 truncate">
-                  {zone.radiusKm} km · {zone.condition === 'all' ? 'Qualquer ocorrência' : 'Apenas grandes incêndios'}
+                  {zone.radiusKm} km ·{' '}
+                  {zone.condition === 'all' ? t('watch.conditionAll') : t('watch.conditionMajor')}
                 </p>
               </div>
 
@@ -192,7 +202,7 @@ export const WatchZonesView: React.FC<WatchZonesViewProps> = ({
                 <span className="font-['Inter'] text-[11px] font-bold text-[#e2e2e3] uppercase tracking-wider">
                   FOGO.PT
                 </span>
-                <span className="font-['Inter'] text-[11px] text-[#e5bdb9]">Agora</span>
+                <span className="font-['Inter'] text-[11px] text-[#e5bdb9]">{t('time.justNow')}</span>
               </div>
               <p className="font-['Inter'] text-[13px] text-[#e2e2e3] leading-tight">
                 Nova ocorrência a {(radiusKm * 0.4).toFixed(1)} km de {name || 'sua localização'} — Em Curso, 94 operacionais

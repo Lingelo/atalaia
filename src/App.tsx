@@ -1,9 +1,10 @@
 import { useState, useMemo } from 'react';
-import { Incident, WatchZone, ViewTab, MapTileLayer } from './types';
+import { Incident, WatchZone, ViewTab, MapTileLayer, ViewScope } from './types';
 import { INITIAL_WATCH_ZONES } from './data/mockData';
 import { useActiveIncidents } from './hooks/useActiveIncidents';
 import { useSatelliteDetections } from './hooks/useSatelliteDetections';
 import { SatelliteLayerControl } from './components/SatelliteLayerControl';
+import { SatelliteListView } from './components/SatelliteListView';
 import { resolveStatus } from './lib/status';
 import { InteractiveMap } from './components/InteractiveMap';
 import { IncidentListView } from './components/IncidentListView';
@@ -11,8 +12,11 @@ import { IncidentDetailPanel } from './components/IncidentDetailPanel';
 import { AnalyticsView } from './components/AnalyticsView';
 import { WatchZonesView } from './components/WatchZonesView';
 import { NavigationShell } from './components/NavigationShell';
+import { useI18n } from './i18n/context';
 
 export default function App() {
+  const { t, n } = useI18n();
+
   const {
     incidents: fetchedIncidents,
     isLoading,
@@ -35,11 +39,25 @@ export default function App() {
   // Stockés à part des incidents, qui sont remplacés à chaque rafraîchissement.
   const [followedIds, setFollowedIds] = useState<Set<string>>(() => new Set());
 
-  // Couche satellite : masquée par défaut. Deux raisons — elle représente ~1 Mo
-  // de CSV qu'on n'impose pas à qui ne s'en sert pas, et surtout elle montre des
-  // détections NON confirmées au sol, qu'il ne faut pas donner à voir comme un
-  // équivalent des ocorrências officielles.
-  const [showSatellite, setShowSatellite] = useState(false);
+  /**
+   * Périmètre affiché.
+   *
+   * Les données opérationnelles (effectifs, statuts, chronologie) n'existent
+   * qu'au Portugal : vérifié, la Catalogne ne publie ni coordonnées ni effectifs
+   * et accuse six jours de retard, la France ne diffuse que des statistiques
+   * annuelles. Un mode européen qui prétendrait décrire des moyens afficherait
+   * « 0 opérationnel » partout, ce qui laisserait croire qu'il y brûle moins.
+   *
+   * Chaque mode est donc homogène de bout en bout : bandeau, liste et carte
+   * décrivent la même chose.
+   */
+  const [scope, setScope] = useState<ViewScope>('portugal');
+
+  // La couche satellite est le SUJET en mode Europe, et un simple calque
+  // facultatif en mode Portugal (utile pour repérer un départ que l'ANEPC n'a
+  // pas encore enregistré). Rien n'est téléchargé tant qu'elle n'est pas demandée.
+  const [showSatelliteOverlay, setShowSatelliteOverlay] = useState(false);
+  const showSatellite = scope === 'europe' || showSatelliteOverlay;
   const { detections, isLoading: isSatelliteLoading } = useSatelliteDetections(showSatellite);
 
   // Liste mobile : ouverte ou fermée, rien de plus.
@@ -75,6 +93,39 @@ export default function App() {
 
     return { activeCount, operacionais, veiculos, meiosAereos };
   }, [incidents]);
+
+  /**
+   * Chiffres et libellés du bandeau, gouvernés par le périmètre.
+   *
+   * En mode Europe on ne réutilise SURTOUT PAS les tuiles opérationnelles : on
+   * décrit des foyers, une puissance et une couverture, pas des pompiers.
+   */
+  const satelliteStats = useMemo(() => {
+    const strongest = detections.reduce((max, d) => Math.max(max, d.frpMw), 0);
+    return {
+      activeCount: detections.length,
+      operacionais: Math.round(strongest),
+      veiculos: detections.filter((d) => d.confidence === 'high').length,
+      meiosAereos: detections.filter((d) => d.passes > 1).length,
+    };
+  }, [detections]);
+
+  const displayedStats = scope === 'europe' ? satelliteStats : totalStats;
+
+  const statLabels: [string, string, string, string] =
+    scope === 'europe'
+      ? [
+          t('stats.detections'),
+          `MW · ${t('stats.strongest')}`,
+          t('stats.highConfidence'),
+          t('stats.multiPass'),
+        ]
+      : [
+          t('stats.activeOccurrences'),
+          t('stats.personnel'),
+          t('stats.vehicles'),
+          t('stats.aircraft'),
+        ];
 
   // Selected incident object
   const selectedIncident = useMemo(() => {
@@ -126,7 +177,7 @@ export default function App() {
             onClick={refresh}
             className="ml-2 underline underline-offset-2 hover:no-underline"
           >
-            Tentar novamente
+            {t('error.retry')}
           </button>
         </div>
       )}
@@ -135,7 +186,10 @@ export default function App() {
       <NavigationShell
         activeTab={activeTab}
         onChangeTab={setActiveTab}
-        totalStats={totalStats}
+        totalStats={displayedStats}
+        scope={scope}
+        onChangeScope={setScope}
+        statLabels={statLabels}
         lastUpdatedAt={lastUpdatedAt}
         isRefreshing={isRefreshing}
         onRefresh={refresh}
@@ -148,14 +202,24 @@ export default function App() {
         {isLoading && (
           <div className="absolute inset-0 z-[600] flex flex-col items-center justify-center gap-3 bg-[#121415] text-[#e5bdb9]">
             <span className="material-symbols-outlined text-[32px] animate-spin">progressbar</span>
-            <span className="text-sm">A carregar ocorrências…</span>
+            <span className="text-sm">{t('loading.incidents')}</span>
           </div>
         )}
 
         {/* TAB 1: DASHBOARD / LIVE MAP */}
         {activeTab === 'dashboard' && (
           <div className="flex-1 relative w-full h-full md:flex md:flex-row overflow-hidden">
-            {/* Liste : bottom sheet flottante sur mobile, barre latérale sur desktop. */}
+            {/* Liste : elle décrit CE QUE le périmètre contient. En mode Europe,
+                réutiliser les lignes opérationnelles aurait rempli la colonne de
+                « 0 opérationnel », ce qui serait faux. */}
+            {scope === 'europe' ? (
+              <SatelliteListView
+                detections={detections}
+                isLoading={isSatelliteLoading}
+                isOpen={isListOpen}
+                onClose={() => setIsListOpen(false)}
+              />
+            ) : (
             <IncidentListView
               incidents={incidents}
               selectedIncidentId={selectedIncidentId}
@@ -170,6 +234,7 @@ export default function App() {
               isOpen={isListOpen}
               onClose={() => setIsListOpen(false)}
             />
+            )}
 
             {/* Carte. Sur mobile elle occupe tout le cadre et la liste flotte
                 au-dessus ; sur desktop elle redevient un enfant flex.
@@ -189,19 +254,24 @@ export default function App() {
                 className="w-full h-full"
               />
 
+              {/* En mode Europe, la liste porte déjà le titre, le compteur et
+                  l'avertissement : l'encart ferait doublon. Il ne sert que de
+                  calque facultatif en mode Portugal. */}
+              {scope === 'portugal' && (
               <SatelliteLayerControl
                 isOn={showSatellite}
-                onToggle={() => setShowSatellite((on) => !on)}
+                onToggle={() => setShowSatelliteOverlay((on) => !on)}
                 isLoading={isSatelliteLoading}
                 detectionCount={detections.length}
               />
+              )}
             </div>
 
             {/* Interrupteur de la liste, mobile uniquement. Masqué quand la liste
                 est ouverte (elle porte alors son propre bouton de fermeture) et
                 quand un incident est sélectionné, pour ne pas flotter au-dessus
                 du panneau de détail. */}
-            {!isListOpen && !selectedIncident && (
+            {!isListOpen && !(selectedIncident && scope === 'portugal') && (
               <button
                 type="button"
                 onClick={() => setIsListOpen(true)}
@@ -209,13 +279,15 @@ export default function App() {
               >
                 <span className="material-symbols-outlined text-[20px] text-[#ffb3ad]">list</span>
                 <span className="font-['Inter'] text-[14px] font-semibold tabular-nums whitespace-nowrap">
-                  {incidents.length} ocorrências
+                  {scope === 'europe'
+                    ? t('list.openDetections', { count: n(detections.length) })
+                    : t('list.open', { count: incidents.length })}
                 </span>
               </button>
             )}
 
             {/* Right Sliding Detail Panel (Opens when an incident is selected) */}
-            {selectedIncident && (
+            {selectedIncident && scope === 'portugal' && (
               <IncidentDetailPanel
                 incident={selectedIncident}
                 onClose={() => setSelectedIncidentId(null)}

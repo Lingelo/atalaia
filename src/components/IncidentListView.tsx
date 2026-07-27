@@ -2,6 +2,8 @@ import React, { useState } from 'react';
 import { Incident, ViewTab } from '../types';
 import { formatDateTime, formatTimeAgo } from '../lib/time';
 import { resolveStatus } from '../lib/status';
+import { useI18n } from '../i18n/context';
+import type { TranslationKey } from '../i18n/pt';
 
 interface IncidentListViewProps {
   incidents: Incident[];
@@ -38,8 +40,18 @@ export const IncidentListView: React.FC<IncidentListViewProps> = ({
   onClose,
   totalStats,
 }) => {
+  const { t, n, intlTag } = useI18n();
   const [showFilterDropdown, setShowFilterDropdown] = useState(false);
   const [activeChipFilter, setActiveChipFilter] = useState<string>('all');
+
+  /** Libellé traduit d'un statut : indexé sur le code, jamais sur le texte source. */
+  const statusLabel = (incident: Incident) => {
+    const meta = resolveStatus(incident.statusCode, incident.status);
+    const key = `status.${meta.code}` as TranslationKey;
+    return meta.code >= 1 && meta.code <= 10
+      ? t(key)
+      : t('status.unknown', { code: meta.code });
+  };
 
   // Couleurs de statut : registre unique (src/lib/status.ts), appliqué en style
   // inline. Tailwind ne peut pas générer `bg-[${color}]` à l'exécution — son
@@ -111,8 +123,10 @@ export const IncidentListView: React.FC<IncidentListViewProps> = ({
           liste contient, le bouton dit explicitement ce qu'il fait. */}
       <div className="md:hidden flex items-center justify-between px-4 py-3 bg-[#1e2021] border-b border-[#2D3034] shrink-0">
         <span className="font-['Inter'] text-[13px] text-[#e5bdb9] tabular-nums">
-          {totalStats.activeCount} ativas · {totalStats.operacionais.toLocaleString('pt-PT')}{' '}
-          operacionais
+          {t('list.summary', {
+            active: totalStats.activeCount,
+            personnel: n(totalStats.operacionais),
+          })}
         </span>
         <button
           type="button"
@@ -120,7 +134,7 @@ export const IncidentListView: React.FC<IncidentListViewProps> = ({
           className="flex items-center gap-1 px-3 py-1.5 -mr-2 rounded text-[#e2e2e3] hover:bg-[#333536] transition-colors"
         >
           <span className="material-symbols-outlined text-[20px]">keyboard_arrow_down</span>
-          <span className="font-['Inter'] text-[13px] font-semibold">Fechar</span>
+          <span className="font-['Inter'] text-[13px] font-semibold">{t('list.close')}</span>
         </button>
       </div>
 
@@ -138,7 +152,7 @@ export const IncidentListView: React.FC<IncidentListViewProps> = ({
             type="button"
             onClick={() => setShowFilterDropdown(!showFilterDropdown)}
             className="w-8 h-8 flex items-center justify-center rounded hover:bg-[#333536] transition-colors text-[#e5bdb9]"
-            title="Pesquisar / Filtrar"
+            title={t('list.filters')}
           >
             <span className="material-symbols-outlined text-[20px]">search</span>
           </button>
@@ -201,7 +215,7 @@ export const IncidentListView: React.FC<IncidentListViewProps> = ({
               type="text"
               value={searchTerm}
               onChange={(e) => onSearchChange(e.target.value)}
-              placeholder="Pesquisar ocorrência..."
+              placeholder={t('list.searchPlaceholder')}
               className="w-full bg-[#1e2021] border border-[#333536] text-[#e2e2e3] pl-9 pr-3 py-1.5 text-xs rounded focus:outline-none focus:border-[#ffb3ad] placeholder:text-[#e5bdb9]/60"
             />
           </div>
@@ -224,19 +238,28 @@ export const IncidentListView: React.FC<IncidentListViewProps> = ({
         {showFilterDropdown && (
           <div className="mt-1 p-2 bg-[#1e2021] border border-[#333536] rounded space-y-2 text-xs">
             <div className="flex justify-between items-center text-[#e5bdb9] font-semibold">
-              <span>Filtrar por Estado</span>
+              <span>{t('list.filterByStatus')}</span>
               {statusFilter !== 'all' && (
                 <button
                   type="button"
                   onClick={() => onStatusFilterChange('all')}
                   className="text-[#ffb3ad] underline text-[11px]"
                 >
-                  Limpar
+                  {t('list.clear')}
                 </button>
               )}
             </div>
             <div className="grid grid-cols-2 gap-1.5">
-              {[{ code: 'all', label: 'Todos' }, ...availableStatuses.map((s) => ({ code: String(s.code), label: s.label }))].map(({ code: st, label }) => (
+              {[
+                { code: 'all', label: t('list.all') },
+                ...availableStatuses.map((meta) => ({
+                  code: String(meta.code),
+                  label:
+                    meta.code >= 1 && meta.code <= 10
+                      ? t(`status.${meta.code}` as TranslationKey)
+                      : t('status.unknown', { code: meta.code }),
+                })),
+              ].map(({ code: st, label }) => (
                 <button
                   key={st}
                   type="button"
@@ -247,7 +270,7 @@ export const IncidentListView: React.FC<IncidentListViewProps> = ({
                       : 'bg-[#16191C] text-[#e2e2e3] hover:bg-[#282a2b]'
                   }`}
                 >
-                  {st === 'all' ? 'Todos os estados' : label}
+                  {st === 'all' ? t('list.allStatuses') : label}
                 </button>
               ))}
             </div>
@@ -256,7 +279,14 @@ export const IncidentListView: React.FC<IncidentListViewProps> = ({
 
         {/* Mobile Quick Chips */}
         <div className="md:hidden flex gap-2 overflow-x-auto no-scrollbar pt-1">
-          {['all', '> 100 Ops', 'Aerial Assets', 'Resolution'].map((chip) => (
+          {(
+            [
+              ['all', t('list.all')],
+              ['> 100 Ops', t('list.chipOver100')],
+              ['Aerial Assets', t('list.chipAerial')],
+              ['Resolution', t('list.chipOngoing')],
+            ] as const
+          ).map(([chip, chipLabel]) => (
             <button
               key={chip}
               type="button"
@@ -267,7 +297,7 @@ export const IncidentListView: React.FC<IncidentListViewProps> = ({
                   : 'bg-transparent border border-[#333536] text-[#e5bdb9]'
               }`}
             >
-              {chip === 'all' ? 'Todos' : chip}
+              {chipLabel}
             </button>
           ))}
         </div>
@@ -306,9 +336,9 @@ export const IncidentListView: React.FC<IncidentListViewProps> = ({
                 </div>
                 <span
                   className="font-['Inter'] text-[12px] text-[#e5bdb9] tabular-nums shrink-0 ml-2"
-                  title={formatDateTime(inc.startedAt)}
+                  title={formatDateTime(inc.startedAt, intlTag)}
                 >
-                  {formatTimeAgo(inc.startedAt)}
+                  {formatTimeAgo(inc.startedAt, intlTag, t('time.justNow'))}
                 </span>
               </div>
 
@@ -317,7 +347,7 @@ export const IncidentListView: React.FC<IncidentListViewProps> = ({
                   className="px-2 py-0.5 border rounded text-[10px] font-bold uppercase tracking-wider"
                   style={badgeStyle}
                 >
-                  {inc.status}
+                  {statusLabel(inc)}
                 </div>
               </div>
 
