@@ -136,6 +136,8 @@ export const fr: Dictionary = {
   'stats.highConfidence': 'confiance élevée',
   'stats.multiPass': 'passages multiples',
   'time.justNow': "à l'instant",
+  'app.name': 'Atalaia',
+  'app.title': 'Atalaia — Feux de forêt au Portugal, en Espagne et en France · Carte en temps réel',
   'lang.label': 'Langue',
 
   'credits.sources': 'Sources : fogos.pt · ANEPC · ICNF · NASA FIRMS',

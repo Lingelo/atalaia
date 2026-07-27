@@ -143,7 +143,7 @@ export const IncidentListView: React.FC<IncidentListViewProps> = ({
         <div className="flex items-center gap-2">
           <span className="material-symbols-outlined text-[#ffb3ad] text-2xl">menu</span>
           <h1 className="font-['Inter'] text-[20px] font-bold tracking-tight text-[#e2e2e3]">
-            FOGO.PT
+            {t('app.name')}
           </h1>
         </div>
 

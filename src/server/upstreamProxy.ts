@@ -20,7 +20,7 @@
  * On s'identifie honnêtement plutôt que d'usurper un navigateur : si notre trafic
  * pose problème, l'opérateur doit pouvoir nous identifier et nous joindre.
  */
-const USER_AGENT = 'fogos-pt-renew/0.1 (+https://github.com/Lingelo/fogos-pt-renew)';
+const USER_AGENT = 'atalaia/0.1 (+https://github.com/Lingelo/fogos-pt-renew)';
 
 export interface UpstreamConfig {
   /** Origine amont, sans barre oblique finale. */

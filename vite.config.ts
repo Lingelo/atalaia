@@ -47,6 +47,15 @@ function upstreamProxyPlugin(): Plugin {
 }
 
 export default defineConfig({
+  /**
+   * Chemin racine du site publié.
+   *
+   * GitHub Pages sert un dépôt de projet sous `/<nom-du-depot>/`, pas à la
+   * racine du domaine. Sans ce préfixe, tous les liens vers les assets pointent
+   * vers `/assets/…` et renvoient 404. Laissé configurable pour que
+   * `npm run preview` en local fonctionne toujours à la racine.
+   */
+  base: process.env.VITE_BASE ?? '/',
   plugins: [react(), tailwindcss(), upstreamProxyPlugin()],
   resolve: {
     alias: {

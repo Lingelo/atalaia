@@ -1,18 +1,31 @@
 /**
  * Client de l'API fogos.pt.
  *
- * On ne tape JAMAIS api.fogos.pt directement depuis le navigateur : les requêtes
- * passent par le proxy défini dans `vite.config.ts`, qui ajoute un User-Agent
- * identifiable et met la réponse en cache. Sonder l'API avec un `curl` nu suffit
- * à déclencher l'erreur Cloudflare 1015 ; multiplié par le nombre de visiteurs,
- * ce serait à la fois cassé et impoli envers un service public gratuit.
+ * En développement, les requêtes passent par le proxy défini dans
+ * `vite.config.ts`, qui ajoute un User-Agent identifiable et mutualise le cache.
+ * Sonder l'API avec un `curl` nu suffit à déclencher l'erreur Cloudflare 1015.
+ *
+ * En production statique, l'appel est direct : l'API publie
+ * `Access-Control-Allow-Origin: *`, ce qui est une invitation explicite. Voir la
+ * note sur `API_BASE` pour la contrepartie.
  */
 
 import type { FogosActiveResponse, FogosIncident } from './fogosTypes';
 import type { BurnedBreakdown, Incident } from '../types';
 
-/** Racine du proxy. Le chemin qui suit est relayé tel quel vers api.fogos.pt. */
-const API_BASE = '/api/fogos';
+/**
+ * Racine des appels.
+ *
+ * En développement : le proxy local, qui mutualise le cache et s'annonce avec un
+ * User-Agent identifiable.
+ *
+ * En production statique (GitHub Pages) : appel direct, possible parce que
+ * api.fogos.pt publie `Access-Control-Allow-Origin: *` — vérifié. Contrepartie
+ * assumée : plus de cache partagé, chaque visiteur interroge la source. C'est
+ * tenable au rythme d'un rafraîchissement par minute et par onglet ; si le trafic
+ * grandit, il faudra une fonction serverless réutilisant `createUpstreamProxy`.
+ */
+const API_BASE = import.meta.env.DEV ? '/api/fogos' : 'https://api.fogos.pt';
 
 /**
  * Extrait le contour d'un KML en coordonnées Leaflet.

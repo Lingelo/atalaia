@@ -158,6 +158,8 @@ export const pt = {
   'stats.highConfidence': 'alta confiança',
   'stats.multiPass': 'multi-passagem',
   'time.justNow': 'agora mesmo',
+  'app.name': 'Atalaia',
+  'app.title': 'Atalaia — Incêndios em Portugal, Espanha e França · Mapa em tempo real',
   'lang.label': 'Idioma',
 
   // Attributions

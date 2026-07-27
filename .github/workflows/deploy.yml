@@ -1,0 +1,60 @@
+name: Déploiement GitHub Pages
+
+on:
+  push:
+    branches: [main]
+  # Les satellites VIIRS repassent toutes les quelques heures : republier plus
+  # souvent ne ferait que retélécharger les mêmes CSV.
+  schedule:
+    - cron: '17 */3 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Une seule publication à la fois ; on ne coupe pas celle qui est en cours.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+
+      - run: npm ci
+
+      - name: Vérifier le typage
+        run: npm run lint
+
+      # NASA FIRMS ne renvoie aucun en-tête CORS : le navigateur ne peut pas
+      # l'interroger depuis un site statique. On précalcule donc les foyers ici.
+      - name: Précalculer les détections satellite
+        run: npm run build:data
+
+      - name: Construire le site
+        run: npm run build
+        env:
+          VITE_BASE: /atalaia/
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

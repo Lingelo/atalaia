@@ -6,3 +6,6 @@ coverage/
 *.log
 .env*
 !.env.example
+
+# Données satellite précalculées au build
+public/data/

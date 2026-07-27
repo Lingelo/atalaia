@@ -30,7 +30,7 @@ const API_BASE = '/api/firms';
  * là où VIIRS est catégoriel, et sa résolution est quatre fois plus grossière.
  * Mélanger les deux imposerait une normalisation pour un gain marginal.
  */
-const VIIRS_SOURCES = [
+export const VIIRS_SOURCES = [
   '/data/active_fire/suomi-npp-viirs-c2/csv/SUOMI_VIIRS_C2_Europe_24h.csv',
   '/data/active_fire/noaa-20-viirs-c2/csv/J1_VIIRS_C2_Europe_24h.csv',
   '/data/active_fire/noaa-21-viirs-c2/csv/J2_VIIRS_C2_Europe_24h.csv',
@@ -182,9 +182,52 @@ export function clusterDetections(rows: FirmsRow[]): SatelliteDetection[] {
   return detections.sort((a, b) => b.frpMw - a.frpMw);
 }
 
+/**
+ * Pipeline pur : CSV bruts → foyers regroupés.
+ *
+ * Extrait de la fonction de chargement pour être réutilisable hors navigateur —
+ * le script de build s'en sert pour précalculer les données destinées à
+ * GitHub Pages, où aucun serveur ne peut relayer FIRMS (voir plus bas).
+ */
+export function processFirmsCsvs(csvTexts: string[]): SatelliteDetection[] {
+  const rows = csvTexts
+    .flatMap(parseFirmsCsv)
+    .filter(inBbox)
+    // Les détections « low » sont majoritairement des faux positifs (surfaces
+    // chaudes, réverbération). Les afficher sur une carte de sécurité publique
+    // reviendrait à annoncer des feux qui n'existent pas.
+    .filter((row) => row.confidence !== 'low');
+
+  return clusterDetections(rows);
+}
+
+/**
+ * Emplacement du jeu précalculé, en production.
+ *
+ * FIRMS ne renvoie AUCUN en-tête CORS : un navigateur ne peut donc pas
+ * l'interroger directement depuis un site statique. Les données sont produites
+ * au build par une GitHub Action planifiée, ce qui a deux vertus : ça contourne
+ * l'absence de serveur, et ça épargne à la NASA un téléchargement de 900 Ko par
+ * visiteur. La fraîcheur (quelques heures) correspond de toute façon à la
+ * cadence de repassage des satellites.
+ */
+function prebuiltUrl(): string {
+  // Évalué à l'appel et non au chargement du module : `import.meta.env` n'existe
+  // que sous Vite, or ce fichier est aussi importé par le script de build Node,
+  // qui ne réutilise que les fonctions pures.
+  return `${import.meta.env.BASE_URL}data/firms.json`;
+}
+
 export async function fetchSatelliteDetections(
   signal?: AbortSignal
 ): Promise<SatelliteDetection[]> {
+  // En production (site statique), on lit le jeu précalculé.
+  if (!import.meta.env.DEV) {
+    const response = await fetch(prebuiltUrl(), { signal });
+    if (!response.ok) throw new Error('Serviço de deteção por satélite indisponível.');
+    return (await response.json()) as SatelliteDetection[];
+  }
+
   // `allSettled` et non `all` : si un satellite est indisponible, on affiche les
   // deux autres plutôt que de perdre toute la couche.
   const results = await Promise.allSettled(
@@ -197,18 +240,15 @@ export async function fetchSatelliteDetections(
 
   if (signal?.aborted) throw new DOMException('Aborted', 'AbortError');
 
+  if (results.every((r) => r.status === 'rejected')) {
+    throw new Error('Serviço de deteção por satélite indisponível.');
+  }
+
   const rows = results
     .filter((r): r is PromiseFulfilledResult<FirmsRow[]> => r.status === 'fulfilled')
     .flatMap((r) => r.value)
     .filter(inBbox)
-    // Les détections « low » sont majoritairement des faux positifs (surfaces
-    // chaudes, réverbération). Les afficher sur une carte de sécurité publique
-    // reviendrait à annoncer des feux qui n'existent pas.
     .filter((row) => row.confidence !== 'low');
-
-  if (rows.length === 0 && results.every((r) => r.status === 'rejected')) {
-    throw new Error('Serviço de deteção por satélite indisponível.');
-  }
 
   return clusterDetections(rows);
 }

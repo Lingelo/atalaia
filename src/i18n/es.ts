@@ -136,6 +136,8 @@ export const es: Dictionary = {
   'stats.highConfidence': 'confianza alta',
   'stats.multiPass': 'pasadas múltiples',
   'time.justNow': 'ahora mismo',
+  'app.name': 'Atalaia',
+  'app.title': 'Atalaia — Incendios en Portugal, España y Francia · Mapa en tiempo real',
   'lang.label': 'Idioma',
 
   'credits.sources': 'Fuentes: fogos.pt · ANEPC · ICNF · NASA FIRMS',

@@ -1,4 +1,4 @@
-import React, { createContext, useCallback, useContext, useMemo, useState } from 'react';
+import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 
 import { pt, type Dictionary, type TranslationKey } from './pt';
 import { fr } from './fr';
@@ -101,6 +101,13 @@ export const I18nProvider: React.FC<{ children: React.ReactNode }> = ({ children
       intlTag,
     };
   }, [locale, setLocale]);
+
+  // Le titre de l'onglet suit la langue : `index.html` ne peut porter qu'une
+  // seule valeur statique, forcément fausse pour trois visiteurs sur quatre.
+  useEffect(() => {
+    document.title = value.t('app.title');
+    document.documentElement.lang = locale;
+  }, [value, locale]);
 
   return <I18nContext.Provider value={value}>{children}</I18nContext.Provider>;
 };

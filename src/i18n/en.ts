@@ -135,6 +135,8 @@ export const en: Dictionary = {
   'stats.highConfidence': 'high confidence',
   'stats.multiPass': 'multiple passes',
   'time.justNow': 'just now',
+  'app.name': 'Atalaia',
+  'app.title': 'Atalaia — Wildfires in Portugal, Spain and France · Live map',
   'lang.label': 'Language',
 
   'credits.sources': 'Sources: fogos.pt · ANEPC · ICNF · NASA FIRMS',

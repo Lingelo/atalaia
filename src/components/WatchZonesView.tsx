@@ -200,7 +200,7 @@ export const WatchZonesView: React.FC<WatchZonesViewProps> = ({
             <div>
               <div className="flex justify-between items-baseline mb-0.5">
                 <span className="font-['Inter'] text-[11px] font-bold text-[#e2e2e3] uppercase tracking-wider">
-                  FOGO.PT
+                  {t('app.name')}
                 </span>
                 <span className="font-['Inter'] text-[11px] text-[#e5bdb9]">{t('time.justNow')}</span>
               </div>
