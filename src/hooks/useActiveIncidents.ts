@@ -44,8 +44,10 @@ export function useActiveIncidents(): ActiveIncidentsState {
 
     try {
       const next = await fetchActiveIncidents(controller.signal);
-      setIncidents(next);
-      setLastUpdatedAt(Date.now());
+      setIncidents(next.incidents);
+      // Date de PRODUCTION de la donnée, pas du téléchargement : sur un site
+      // statique elle peut avoir une demi-heure, et l'utilisateur doit le voir.
+      setLastUpdatedAt(next.generatedAt);
       setError(null);
       hasDataRef.current = true;
     } catch (cause) {

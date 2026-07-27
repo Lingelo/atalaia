@@ -14,18 +14,36 @@ import type { FogosActiveResponse, FogosIncident } from './fogosTypes';
 import type { BurnedBreakdown, Incident } from '../types';
 
 /**
- * Racine des appels.
+ * Origine du proxy en production, injectée au build.
  *
- * En développement : le proxy local, qui mutualise le cache et s'annonce avec un
- * User-Agent identifiable.
- *
- * En production statique (GitHub Pages) : appel direct, possible parce que
- * api.fogos.pt publie `Access-Control-Allow-Origin: *` — vérifié. Contrepartie
- * assumée : plus de cache partagé, chaque visiteur interroge la source. C'est
- * tenable au rythme d'un rafraîchissement par minute et par onglet ; si le trafic
- * grandit, il faudra une fonction serverless réutilisant `createUpstreamProxy`.
+ * Vide par défaut : le site statique lit alors le JSON précalculé. Renseignée
+ * (par exemple avec une fonction Cloudflare, voir workers/README.md), elle rend
+ * les données réellement temps réel sans autre changement.
  */
-const API_BASE = import.meta.env.DEV ? '/api/fogos' : 'https://api.fogos.pt';
+function runtimeProxy(): string {
+  // Évalué à l'appel : `import.meta.env` n'existe que sous Vite, or ce module
+  // est aussi importé par les scripts de build Node, qui n'en tirent que des
+  // fonctions pures. Deuxième occurrence du même piège — il vaut la règle :
+  // aucun accès à import.meta.env au niveau module dans du code partagé.
+  return import.meta.env.VITE_FOGOS_PROXY ?? '';
+}
+
+/** Jeu précalculé publié par `npm run build:incidents`. */
+function prebuiltUrl(): string {
+  return `${import.meta.env.BASE_URL}data/incidents.json`;
+}
+
+export interface ActiveIncidentsPayload {
+  incidents: Incident[];
+  /**
+   * Instant où la donnée a été produite — PAS celui du téléchargement.
+   *
+   * Sans cette distinction, l'interface afficherait « actualisé à l'instant »
+   * pour une donnée vieille d'une demi-heure. Sur une carte d'incendies, faire
+   * passer une information périmée pour fraîche est le pire des mensonges.
+   */
+  generatedAt: number;
+}
 
 /**
  * Extrait le contour d'un KML en coordonnées Leaflet.
@@ -110,17 +128,33 @@ export function toIncident(raw: FogosIncident): Incident {
 }
 
 export class FogosApiError extends Error {
-  constructor(message: string, readonly status?: number) {
+  // Champ déclaré puis assigné, plutôt qu'une propriété de paramètre
+  // (`readonly status` dans la signature) : cette dernière GÉNÈRE du code, là où
+  // Node 24 ne sait qu'EFFACER les annotations. Or ce module est importé tel
+  // quel par les scripts de build.
+  readonly status?: number;
+
+  constructor(message: string, status?: number) {
     super(message);
     this.name = 'FogosApiError';
+    this.status = status;
   }
 }
 
 /** Récupère les incidents actifs. `signal` permet d'annuler un rafraîchissement obsolète. */
-export async function fetchActiveIncidents(signal?: AbortSignal): Promise<Incident[]> {
+export async function fetchActiveIncidents(signal?: AbortSignal): Promise<ActiveIncidentsPayload> {
+  // Site statique sans proxy : on lit le jeu précalculé, qui porte sa date.
+  if (!import.meta.env.DEV && !runtimeProxy()) {
+    const prebuilt = await fetch(prebuiltUrl(), { signal, cache: 'no-cache' });
+    if (!prebuilt.ok) throw new FogosApiError('Sem ligação ao serviço de incêndios.');
+    return (await prebuilt.json()) as ActiveIncidentsPayload;
+  }
+
+  const base = import.meta.env.DEV ? '/api/fogos' : runtimeProxy();
+
   let response: Response;
   try {
-    response = await fetch(`${API_BASE}/v2/incidents/active`, { signal });
+    response = await fetch(`${base}/v2/incidents/active`, { signal });
   } catch (cause) {
     // Une annulation volontaire n'est pas une panne : on la laisse remonter telle quelle.
     if (cause instanceof DOMException && cause.name === 'AbortError') throw cause;
@@ -141,7 +175,10 @@ export async function fetchActiveIncidents(signal?: AbortSignal): Promise<Incide
 
   // `coords: false` signale un incident sans localisation exploitable. On l'écarte
   // plutôt que de le poser en (0, 0), au large du golfe de Guinée.
-  return payload.data
-    .filter((raw) => raw.coords && Number.isFinite(raw.lat) && Number.isFinite(raw.lng))
-    .map(toIncident);
+  return {
+    generatedAt: Date.now(),
+    incidents: payload.data
+      .filter((raw) => raw.coords && Number.isFinite(raw.lat) && Number.isFinite(raw.lng))
+      .map(toIncident),
+  };
 }

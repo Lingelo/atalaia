@@ -5,8 +5,12 @@ on:
     branches: [main]
   # Les satellites VIIRS repassent toutes les quelques heures : republier plus
   # souvent ne ferait que retélécharger les mêmes CSV.
+  # Les incidents de la protection civile évoluent à la minute ; les satellites
+  # ne repassent que toutes les quelques heures. C'est donc le premier qui fixe
+  # la cadence. Un cron GitHub se déclenche au mieux toutes les 5 minutes et se
+  # trouve souvent retardé : compter sur une fraîcheur de 10 à 30 minutes.
   schedule:
-    - cron: '17 */3 * * *'
+    - cron: '*/15 * * * *'
   workflow_dispatch:
 
 permissions:
@@ -37,7 +41,11 @@ jobs:
 
       # NASA FIRMS ne renvoie aucun en-tête CORS : le navigateur ne peut pas
       # l'interroger depuis un site statique. On précalcule donc les foyers ici.
-      - name: Précalculer les détections satellite
+      # NASA FIRMS ne renvoie aucun en-tête CORS, et api.fogos.pt n'en renvoie
+      # pas non plus sur les GET : un site statique ne peut interroger ni l'un
+      # ni l'autre. On récupère donc les deux ici, où la politique d'origine ne
+      # s'applique pas.
+      - name: Précalculer les données
         run: npm run build:data
 
       - name: Construire le site

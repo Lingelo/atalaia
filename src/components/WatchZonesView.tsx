@@ -42,7 +42,7 @@ export const WatchZonesView: React.FC<WatchZonesViewProps> = ({
       const permission = await Notification.requestPermission();
       setNotificationPermission(permission);
     } else {
-      alert('Seu navegador não suporta Notificações Desktop.');
+      alert(t('watch.noNotifSupport'));
     }
   };
 
@@ -53,7 +53,7 @@ export const WatchZonesView: React.FC<WatchZonesViewProps> = ({
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!name.trim()) {
-      alert('Por favor insira um nome para a localização.');
+      alert(t('watch.needName'));
       return;
     }
 
@@ -69,7 +69,7 @@ export const WatchZonesView: React.FC<WatchZonesViewProps> = ({
       quietHoursEnd,
     });
 
-    setSavedSuccessMsg(`Nova área de alerta "${name.trim()}" criada com sucesso!`);
+    setSavedSuccessMsg(t('watch.created', { name: name.trim() }));
     setName('');
     setTimeout(() => setSavedSuccessMsg(null), 3000);
   };
@@ -82,7 +82,7 @@ export const WatchZonesView: React.FC<WatchZonesViewProps> = ({
       {/* Ces vues affichent des données inventées. L'écrire à l'écran, et pas
           seulement dans le code, évite qu'on les prenne pour des données réelles. */}
       <div className="flex items-start gap-2 rounded border border-[#f0a500]/40 bg-[#f0a500]/10 px-3 py-2.5">
-        <span className="material-symbols-outlined text-[18px] text-[#f0a500] shrink-0">science</span>
+        <span className="material-symbols-outlined text-[18px] text-[#f0a500] shrink-0">warning</span>
         <p className="font-['Inter'] text-[12px] leading-snug text-[#f0d9a0]">{t('watch.mockWarning')}</p>
       </div>
 
@@ -94,17 +94,17 @@ export const WatchZonesView: React.FC<WatchZonesViewProps> = ({
               <span className="material-symbols-outlined text-[#ffb3ad] mt-0.5">notifications_active</span>
               <div className="flex-1">
                 <p className="font-['Inter'] text-[14px] font-semibold text-[#e2e2e3]">
-                  Notificações do navegador desativadas.
+                  {t('watch.notifDisabled')}
                 </p>
                 <p className="font-['Inter'] text-[13px] text-[#e5bdb9] mb-2">
-                  Ative para receber alertas imediatos no computador.
+                  {t('watch.notifEnable')}
                 </p>
                 <button
                   type="button"
                   onClick={requestNotificationPermission}
                   className="font-['Inter'] text-[12px] font-bold uppercase tracking-wider text-[#121415] bg-[#e2e2e3] px-3 py-1.5 rounded hover:bg-white transition-colors"
                 >
-                  Ativar
+                  {t('watch.activate')}
                 </button>
               </div>
             </div>
@@ -145,7 +145,7 @@ export const WatchZonesView: React.FC<WatchZonesViewProps> = ({
                   className={`w-12 h-6 flex items-center rounded-full p-1 transition-colors ${
                     zone.active ? 'bg-[#ffb3ad]' : 'bg-[#333536]'
                   }`}
-                  title={zone.active ? 'Desativar Alerta' : 'Ativar Alerta'}
+                  title={t('watch.alertCondition')}
                 >
                   <div
                     className={`bg-[#121415] w-4 h-4 rounded-full shadow-md transform transition-transform ${
@@ -205,7 +205,10 @@ export const WatchZonesView: React.FC<WatchZonesViewProps> = ({
                 <span className="font-['Inter'] text-[11px] text-[#e5bdb9]">{t('time.justNow')}</span>
               </div>
               <p className="font-['Inter'] text-[13px] text-[#e2e2e3] leading-tight">
-                Nova ocorrência a {(radiusKm * 0.4).toFixed(1)} km de {name || 'sua localização'} — Em Curso, 94 operacionais
+                {t('watch.sampleNotif', {
+                  km: (radiusKm * 0.4).toFixed(1),
+                  place: name || t('watch.yourLocation'),
+                })}
               </p>
             </div>
           </div>
@@ -220,21 +223,21 @@ export const WatchZonesView: React.FC<WatchZonesViewProps> = ({
           )}
 
           <h2 className="font-['Inter'] text-[24px] font-semibold text-[#e2e2e3] mb-6">
-            Nova área de alerta
+            {t('watch.newAreaTitle')}
           </h2>
 
           <form onSubmit={handleSubmit} className="space-y-6">
             {/* Location Name */}
             <div>
               <label className="block font-['Inter'] text-[12px] font-semibold text-[#e5bdb9] uppercase tracking-wider mb-2">
-                Nome da localização
+                {t('watch.locationName')}
               </label>
               <input
                 type="text"
                 required
                 value={name}
                 onChange={(e) => setName(e.target.value)}
-                placeholder="Ex: Casa, Escritório, Terreno..."
+                placeholder={t('watch.locationPlaceholder')}
                 className="w-full bg-[#1e2021] border border-[#333536] rounded px-4 py-3 font-['Inter'] text-[16px] text-[#e2e2e3] placeholder:text-[#e5bdb9]/50 focus:border-[#ffb3ad] focus:outline-none transition-colors"
               />
             </div>
@@ -243,7 +246,7 @@ export const WatchZonesView: React.FC<WatchZonesViewProps> = ({
             <div>
               <div className="flex justify-between items-baseline mb-2">
                 <label className="block font-['Inter'] text-[12px] font-semibold text-[#e5bdb9] uppercase tracking-wider">
-                  Raio de vigilância
+                  {t('watch.watchRadius')}
                 </label>
                 <span className="font-['Inter'] text-[20px] font-bold text-[#e2e2e3] tabular-nums">
                   {radiusKm} km
@@ -268,7 +271,7 @@ export const WatchZonesView: React.FC<WatchZonesViewProps> = ({
             {/* Alert Condition Radio Group */}
             <div>
               <label className="block font-['Inter'] text-[12px] font-semibold text-[#e5bdb9] uppercase tracking-wider mb-3">
-                Condição de alerta
+                {t('watch.alertCondition')}
               </label>
               <div className="flex flex-col gap-2">
                 <label
@@ -288,10 +291,10 @@ export const WatchZonesView: React.FC<WatchZonesViewProps> = ({
                   />
                   <div className="ml-3">
                     <span className="block font-['Inter'] text-[15px] font-semibold text-[#e2e2e3]">
-                      Qualquer ocorrência
+                      {t('watch.conditionAll')}
                     </span>
                     <span className="block font-['Inter'] text-[13px] text-[#e5bdb9]">
-                      Assim que um foco for reportado.
+                      {t('watch.anyIncidentHint')}
                     </span>
                   </div>
                 </label>
@@ -313,10 +316,10 @@ export const WatchZonesView: React.FC<WatchZonesViewProps> = ({
                   />
                   <div className="ml-3">
                     <span className="block font-['Inter'] text-[15px] font-semibold text-[#e2e2e3]">
-                      Grandes incêndios (&gt; 50 op.)
+                      {t('watch.majorOnly')}
                     </span>
                     <span className="block font-['Inter'] text-[13px] text-[#e5bdb9]">
-                      Apenas quando há mobilização significativa.
+                      {t('watch.majorOnlyHint')}
                     </span>
                   </div>
                 </label>
@@ -326,7 +329,7 @@ export const WatchZonesView: React.FC<WatchZonesViewProps> = ({
             {/* Quiet Hours */}
             <div>
               <label className="block font-['Inter'] text-[12px] font-semibold text-[#e5bdb9] uppercase tracking-wider mb-2">
-                Horas de silêncio (Não perturbar)
+                {t('watch.quietHoursFull')}
               </label>
               <div className="flex items-center gap-4">
                 <div className="flex-1">
@@ -337,7 +340,7 @@ export const WatchZonesView: React.FC<WatchZonesViewProps> = ({
                     className="w-full bg-[#1e2021] border border-[#333536] rounded px-4 py-3 font-['Inter'] text-[15px] text-[#e2e2e3] focus:border-[#ffb3ad] focus:outline-none"
                   />
                 </div>
-                <span className="text-[#e5bdb9] font-['Inter'] text-[14px]">até</span>
+                <span className="text-[#e5bdb9] font-['Inter'] text-[14px]">{t('watch.until')}</span>
                 <div className="flex-1">
                   <input
                     type="time"
@@ -359,13 +362,13 @@ export const WatchZonesView: React.FC<WatchZonesViewProps> = ({
                 }}
                 className="px-6 py-3 border border-[#333536] rounded font-['Inter'] text-[14px] font-semibold text-[#e2e2e3] hover:bg-[#282a2b] transition-colors"
               >
-                Cancelar
+                {t('watch.cancel')}
               </button>
               <button
                 type="submit"
                 className="px-6 py-3 rounded bg-[#e2e2e3] text-[#121415] font-['Inter'] text-[14px] font-bold hover:bg-white transition-colors shadow-lg"
               >
-                Guardar Alerta
+                {t('watch.saveAlert')}
               </button>
             </div>
           </form>

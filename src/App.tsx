@@ -201,7 +201,7 @@ export default function App() {
             données étaient présentes dès le premier rendu. */}
         {isLoading && (
           <div className="absolute inset-0 z-[600] flex flex-col items-center justify-center gap-3 bg-[#121415] text-[#e5bdb9]">
-            <span className="material-symbols-outlined text-[32px] animate-spin">progressbar</span>
+            <span className="material-symbols-outlined text-[32px] animate-spin">progress_activity</span>
             <span className="text-sm">{t('loading.incidents')}</span>
           </div>
         )}

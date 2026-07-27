@@ -23,7 +23,7 @@ export const AnalyticsView: React.FC = () => {
       {/* Ces vues affichent des données inventées. L'écrire à l'écran, et pas
           seulement dans le code, évite qu'on les prenne pour des données réelles. */}
       <div className="flex items-start gap-2 rounded border border-[#f0a500]/40 bg-[#f0a500]/10 px-3 py-2.5">
-        <span className="material-symbols-outlined text-[18px] text-[#f0a500] shrink-0">science</span>
+        <span className="material-symbols-outlined text-[18px] text-[#f0a500] shrink-0">warning</span>
         <p className="font-['Inter'] text-[12px] leading-snug text-[#f0d9a0]">{t('analytics.mockWarning')}</p>
       </div>
 
@@ -31,7 +31,7 @@ export const AnalyticsView: React.FC = () => {
       <div className="flex flex-col lg:flex-row lg:items-end justify-between gap-4 pb-4 border-b border-[#333536]">
         <div>
           <h2 className="font-['Inter'] text-[28px] font-semibold text-[#e2e2e3]">{t('analytics.title')}</h2>
-          <p className="font-['Inter'] text-[14px] text-[#e5bdb9]">Archived incidents since 2018</p>
+          <p className="font-['Inter'] text-[14px] text-[#e5bdb9]">{t('analytics.mockWarning')}</p>
         </div>
 
         <div className="flex flex-col sm:flex-row flex-wrap gap-4 items-stretch sm:items-end">
@@ -140,7 +140,7 @@ export const AnalyticsView: React.FC = () => {
             Área Ardida (ha)
           </span>
           <span className="text-[40px] font-bold text-[#e2e2e3] tabular-nums leading-none">1.2M</span>
-          <span className="text-[14px] text-[#e5bdb9] mt-2">Acumulado</span>
+          <span className="text-[14px] text-[#e5bdb9] mt-2">{t('analytics.burnedArea')}</span>
         </div>
 
         <div className="bg-[#121415] col-span-12 sm:col-span-6 lg:col-span-3 p-5 flex flex-col justify-center">
@@ -228,7 +228,7 @@ export const AnalyticsView: React.FC = () => {
                     {hoveredMonth === m.month && (
                       <div className="absolute -top-12 z-20 bg-[#1e2021] border border-[#ffb3ad] text-[#e2e2e3] text-xs p-2 rounded shadow-xl whitespace-nowrap text-center">
                         <div className="font-bold text-[#ffb3ad]">{m.month} {selectedYear}</div>
-                        <div>Ocorrências: <span className="font-bold">{m.count2024}</span></div>
+                        <div>{t('analytics.occurrences')}: <span className="font-bold">{m.count2024}</span></div>
                         <div>Área: <span className="font-bold">{m.burnedHa} ha</span></div>
                       </div>
                     )}
@@ -288,7 +288,7 @@ export const AnalyticsView: React.FC = () => {
 
             {/* Color Ramp Legend */}
             <div className="mt-4 pt-3 border-t border-[#333536] flex items-center justify-between text-xs">
-              <span className="text-[#e5bdb9]">Risco Acumulado</span>
+              <span className="text-[#e5bdb9]">{t('analytics.burnedArea')}</span>
               <div className="flex w-32 h-2.5 rounded overflow-hidden">
                 <div className="flex-1 bg-[#ac8885]" title="Baixo" />
                 <div className="flex-1 bg-[#0079a1]" title="Moderado" />
@@ -340,8 +340,8 @@ export const AnalyticsView: React.FC = () => {
             {/* Header */}
             <div className="flex items-center py-2 text-[12px] font-semibold text-[#e5bdb9] uppercase tracking-wider">
               <div className="w-4 mr-3" />
-              <div className="flex-1">Localização</div>
-              <div className="w-20 text-right">Ano</div>
+              <div className="flex-1">{t('watch.locationName')}</div>
+              <div className="w-20 text-right">{t('analytics.year')}</div>
               <div className="w-28 text-right">Área (ha)</div>
             </div>
 

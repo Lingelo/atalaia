@@ -93,7 +93,7 @@ export const NavigationShell: React.FC<NavigationShellProps> = ({
             <span
               className={`material-symbols-outlined text-[16px] ${isRefreshing ? 'animate-spin' : ''}`}
             >
-              {isRefreshing ? 'progressbar' : 'refresh'}
+              {isRefreshing ? 'progress_activity' : 'refresh'}
             </span>
             {isRefreshing
               ? t('stats.refreshing')
