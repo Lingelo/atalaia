@@ -139,6 +139,70 @@ export const IncidentDetailPanel: React.FC<IncidentDetailPanelProps> = ({
           </div>
         </section>
 
+        {/* Condições no local.
+            L'humidité et le vent gouvernent la propagation : ils passent en gros,
+            la température et la pluie en second rang. La provenance est affichée
+            sans détour — le relevé vient d'une station distante de plusieurs
+            kilomètres, le prétendre mesuré sur place serait mentir. */}
+        <section>
+          <h2 className="font-['Inter'] text-[12px] font-semibold text-[#e5bdb9] uppercase tracking-wider mb-3">
+            Condições no local
+          </h2>
+
+          {incident.weather ? (
+            <>
+              <div className="grid grid-cols-2 gap-3 mb-3">
+                <div className="rounded border border-[#333536] bg-[#121415]/60 p-3">
+                  <span className="font-['Inter'] text-[24px] font-bold text-[#e2e2e3] tabular-nums leading-none">
+                    {Math.round(incident.weather.humidade)}
+                    <span className="text-[14px] font-normal text-[#e5bdb9]"> %</span>
+                  </span>
+                  <p className="font-['Inter'] text-[10px] font-semibold text-[#e5bdb9] uppercase tracking-wide mt-2">
+                    Humidade
+                  </p>
+                </div>
+                <div className="rounded border border-[#333536] bg-[#121415]/60 p-3">
+                  <span className="font-['Inter'] text-[24px] font-bold text-[#e2e2e3] tabular-nums leading-none">
+                    {Math.round(incident.weather.intensidadeVentoKM)}
+                    <span className="text-[14px] font-normal text-[#e5bdb9]"> km/h</span>
+                  </span>
+                  <p className="font-['Inter'] text-[10px] font-semibold text-[#e5bdb9] uppercase tracking-wide mt-2">
+                    Vento {incident.weather.direccVento}
+                  </p>
+                </div>
+              </div>
+
+              <ul className="text-[13px] flex gap-4 mb-2">
+                <li className="text-[#e5bdb9]">
+                  Temperatura{' '}
+                  <span className="text-[#e2e2e3] font-medium tabular-nums">
+                    {incident.weather.temperatura.toLocaleString('pt-PT', {
+                      maximumFractionDigits: 1,
+                    })}{' '}
+                    °C
+                  </span>
+                </li>
+                <li className="text-[#e5bdb9]">
+                  Precipitação{' '}
+                  <span className="text-[#e2e2e3] font-medium tabular-nums">
+                    {incident.weather.precAcumulada} mm
+                  </span>
+                </li>
+              </ul>
+
+              <p className="font-['Inter'] text-[12px] text-[#e5bdb9]/80 italic">
+                Estação de {incident.weather.stationLocation}, a{' '}
+                {Math.round(incident.weather.stationDistance)} km · leitura de{' '}
+                {formatDateTime(Date.parse(incident.weather.date))}
+              </p>
+            </>
+          ) : (
+            <p className="font-['Inter'] text-[13px] text-[#e5bdb9] italic">
+              Sem estação meteorológica associada a esta ocorrência.
+            </p>
+          )}
+        </section>
+
         {/* Vertical Timeline: Histórico de Estado */}
         <section>
           <h2 className="font-['Inter'] text-[12px] font-semibold text-[#e5bdb9] uppercase tracking-wider mb-4">
