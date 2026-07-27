@@ -1,7 +1,18 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import L from 'leaflet';
-import { Incident, WatchZone, MapTileLayer } from '../types';
+import { Incident, WatchZone, MapTileLayer, SatelliteDetection } from '../types';
 import { resolveStatus } from '../lib/status';
+import { formatTimeAgo } from '../lib/time';
+import { SatelliteHeatLayer } from './map/SatelliteHeatLayer';
+
+/**
+ * Seuil de bascule nappe → anneaux individuels.
+ *
+ * Niveau 9 ≈ échelle d'un district : en deçà on regarde un pays et la densité
+ * est la bonne lecture ; au-delà on regarde une vallée et le détail par foyer
+ * (puissance, satellites, nombre de passages) redevient pertinent.
+ */
+const DETAIL_ZOOM = 9;
 
 interface InteractiveMapProps {
   incidents: Incident[];
@@ -10,6 +21,9 @@ interface InteractiveMapProps {
   onSelectIncident: (incident: Incident) => void;
   tileLayerType: MapTileLayer;
   onChangeTileLayer: (layer: MapTileLayer) => void;
+  /** Couche satellite, distincte des incidents opérationnels. Voir src/api/firms.ts. */
+  satelliteDetections?: SatelliteDetection[];
+  showSatellite?: boolean;
   isPickerMode?: boolean;
   pickerPos?: { lat: number; lng: number; radiusKm: number };
   onPickerPosChange?: (lat: number, lng: number) => void;
@@ -23,6 +37,8 @@ export const InteractiveMap: React.FC<InteractiveMapProps> = ({
   onSelectIncident,
   tileLayerType,
   onChangeTileLayer,
+  satelliteDetections = [],
+  showSatellite = false,
   isPickerMode = false,
   pickerPos,
   onPickerPosChange,
@@ -34,7 +50,18 @@ export const InteractiveMap: React.FC<InteractiveMapProps> = ({
   const markersGroupRef = useRef<L.LayerGroup | null>(null);
   const polygonsGroupRef = useRef<L.LayerGroup | null>(null);
   const zonesGroupRef = useRef<L.LayerGroup | null>(null);
+  const satelliteGroupRef = useRef<L.LayerGroup | null>(null);
+  /**
+   * Rendu canvas réservé à la couche satellite : elle compte ~1 100 foyers, là
+   * où le SVG par défaut de Leaflet crée un nœud DOM par marqueur et s'effondre
+   * à cette échelle.
+   */
+  const canvasRendererRef = useRef<L.Canvas | null>(null);
   const pickerMarkerRef = useRef<L.Circle | null>(null);
+  const heatLayerRef = useRef<SatelliteHeatLayer | null>(null);
+  const [zoom, setZoom] = useState(7);
+  /** Incrémenté à chaque déplacement : redéclenche le filtrage des anneaux. */
+  const [moveTick, setMoveTick] = useState(0);
 
   // Tile layer URLs
   const getTileUrl = (type: MapTileLayer) => {
@@ -81,6 +108,12 @@ export const InteractiveMap: React.FC<InteractiveMapProps> = ({
       }).addTo(map);
 
       tileLayerRef.current = tileLayer;
+      canvasRendererRef.current = L.canvas({ padding: 0.3 });
+
+      // Ordre d'ajout = ordre d'empilement. La couche satellite est posée en
+      // premier : les incidents opérationnels, seule donnée de terrain vérifiée,
+      // doivent toujours rester au-dessus.
+      satelliteGroupRef.current = L.layerGroup().addTo(map);
       markersGroupRef.current = L.layerGroup().addTo(map);
       polygonsGroupRef.current = L.layerGroup().addTo(map);
       zonesGroupRef.current = L.layerGroup().addTo(map);
@@ -223,6 +256,96 @@ export const InteractiveMap: React.FC<InteractiveMapProps> = ({
       }
     });
   }, [incidents, selectedIncidentId, isPickerMode, onSelectIncident]);
+
+  // Suit le zoom (qui commande la bascule nappe / anneaux) et les déplacements
+  // (dont dépend le filtrage des anneaux sur l'emprise visible).
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+
+    const sync = () => {
+      setZoom(map.getZoom());
+      setMoveTick((tick) => tick + 1);
+    };
+    sync();
+    map.on('moveend zoomend', sync);
+    return () => {
+      map.off('moveend zoomend', sync);
+    };
+  }, []);
+
+  // Couche satellite (NASA FIRMS), en NAPPE DE DENSITÉ aux échelles larges.
+  //
+  // En dessous du seuil, un foyer isolé ne représente que quelques pixels : mille
+  // points distincts y affirmeraient mille positions précises que la donnée ne
+  // garantit pas. La nappe dit ce que la mesure dit vraiment.
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+
+    const shouldShow = showSatellite && !isPickerMode && zoom < DETAIL_ZOOM;
+
+    if (!shouldShow) {
+      if (heatLayerRef.current) {
+        map.removeLayer(heatLayerRef.current);
+        heatLayerRef.current = null;
+      }
+      return;
+    }
+
+    if (!heatLayerRef.current) {
+      heatLayerRef.current = new SatelliteHeatLayer(satelliteDetections);
+      heatLayerRef.current.addTo(map);
+    } else {
+      heatLayerRef.current.setDetections(satelliteDetections);
+    }
+  }, [satelliteDetections, showSatellite, isPickerMode, zoom]);
+
+  // Couche satellite en ANNEAUX individuels, à partir du seuil de zoom.
+  //
+  // Distinction visuelle volontairement REDONDANTE avec la couche opérationnelle :
+  //   - forme  : anneau CREUX, là où les incidents sont des disques PLEINS
+  //   - teinte : violet, absent de la palette des statuts
+  // La forme seule suffit à les séparer, ce qui rend la carte lisible même en cas
+  // de daltonisme. Une simple différence de couleur ne l'aurait pas garanti.
+  useEffect(() => {
+    if (!mapRef.current || !satelliteGroupRef.current) return;
+
+    satelliteGroupRef.current.clearLayers();
+    if (!showSatellite || isPickerMode || zoom < DETAIL_ZOOM) return;
+
+    // Seuls les foyers visibles sont tracés : au-delà du seuil de zoom, l'emprise
+    // à l'écran n'en contient qu'une poignée sur les onze cents.
+    const bounds = mapRef.current.getBounds().pad(0.25);
+
+    satelliteDetections.forEach((detection) => {
+      if (!bounds.contains([detection.lat, detection.lng])) return;
+      // Rayon proportionnel à la racine quatrième de la puissance radiative :
+      // celle-ci s'étale de 0,2 à 789 MW, une échelle linéaire écraserait tout.
+      const radius = Math.max(3, Math.min(11, 2.5 + Math.pow(detection.frpMw, 0.25) * 1.6));
+
+      const ring = L.circleMarker([detection.lat, detection.lng], {
+        renderer: canvasRendererRef.current ?? undefined,
+        radius,
+        color: detection.confidence === 'high' ? '#c4b5fd' : '#8b5cf6',
+        weight: detection.confidence === 'high' ? 2 : 1.5,
+        // `fill: false` porte toute la distinction : un anneau, jamais un disque.
+        fill: false,
+        interactive: true,
+      });
+
+      const detectedAgo = formatTimeAgo(detection.detectedAt);
+      ring.bindTooltip(
+        `<div style="font-weight:700;color:#c4b5fd">Deteção por satélite</div>
+         <div style="color:#e2e2e3">${detection.frpMw.toFixed(1)} MW · ${detection.passes} passagem(ns)</div>
+         <div style="color:#9ca3af">${detection.satellites.join(', ')} · ${detectedAgo}</div>
+         <div style="color:#9ca3af;font-style:italic;margin-top:4px">Não confirmado no terreno</div>`,
+        { className: 'satellite-tooltip', direction: 'top' }
+      );
+
+      satelliteGroupRef.current?.addLayer(ring);
+    });
+  }, [satelliteDetections, showSatellite, isPickerMode, zoom, moveTick]);
 
   // Render Watch Zones
   useEffect(() => {

@@ -83,6 +83,31 @@ export interface Incident {
   isFollowing?: boolean;
 }
 
+/**
+ * Détection thermique satellite (NASA FIRMS).
+ *
+ * Type délibérément DISJOINT de `Incident`. Le discriminant `kind` interdit de
+ * les confondre à la compilation : une détection satellite n'a ni statut, ni
+ * moyens engagés, ni commune — la traiter comme un incident produirait des
+ * « 0 opérationnel » partout, ce qui laisserait croire que la France et
+ * l'Espagne brûlent moins que le Portugal.
+ */
+export interface SatelliteDetection {
+  kind: 'satellite';
+  id: string;
+  lat: number;
+  lng: number;
+  /** Heure de passage du satellite, pas de départ du feu. Latence typique : 3 h. */
+  detectedAt: number;
+  /** Puissance radiative du feu, en mégawatts. Seul indicateur d'intensité. */
+  frpMw: number;
+  confidence: 'low' | 'nominal' | 'high';
+  /** Nombre de détections regroupées dans ce foyer : un foyer persistant en cumule. */
+  passes: number;
+  /** Satellites l'ayant vu (N, N20, N21). */
+  satellites: string[];
+}
+
 export interface WatchZone {
   id: string;
   name: string;

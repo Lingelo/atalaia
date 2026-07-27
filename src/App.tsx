@@ -2,6 +2,8 @@ import { useState, useMemo } from 'react';
 import { Incident, WatchZone, ViewTab, MapTileLayer } from './types';
 import { INITIAL_WATCH_ZONES } from './data/mockData';
 import { useActiveIncidents } from './hooks/useActiveIncidents';
+import { useSatelliteDetections } from './hooks/useSatelliteDetections';
+import { SatelliteLayerControl } from './components/SatelliteLayerControl';
 import { resolveStatus } from './lib/status';
 import { InteractiveMap } from './components/InteractiveMap';
 import { IncidentListView } from './components/IncidentListView';
@@ -32,6 +34,13 @@ export default function App() {
   // Abonnements « suivre cette zone », conservés en mémoire le temps de la session.
   // Stockés à part des incidents, qui sont remplacés à chaque rafraîchissement.
   const [followedIds, setFollowedIds] = useState<Set<string>>(() => new Set());
+
+  // Couche satellite : masquée par défaut. Deux raisons — elle représente ~1 Mo
+  // de CSV qu'on n'impose pas à qui ne s'en sert pas, et surtout elle montre des
+  // détections NON confirmées au sol, qu'il ne faut pas donner à voir comme un
+  // équivalent des ocorrências officielles.
+  const [showSatellite, setShowSatellite] = useState(false);
+  const { detections, isLoading: isSatelliteLoading } = useSatelliteDetections(showSatellite);
 
   // Liste mobile : ouverte ou fermée, rien de plus.
   //
@@ -163,8 +172,11 @@ export default function App() {
             />
 
             {/* Carte. Sur mobile elle occupe tout le cadre et la liste flotte
-                au-dessus ; sur desktop elle redevient un simple enfant flex. */}
-            <div className="absolute inset-0 md:static md:flex-1 md:h-full z-0">
+                au-dessus ; sur desktop elle redevient un enfant flex.
+                `relative` dans les deux cas : les commandes posées dessus se
+                positionnent par rapport à la CARTE, et non par rapport à la
+                fenêtre — sans quoi elles chevauchent le panneau de détail. */}
+            <div className="absolute inset-0 md:relative md:inset-auto md:flex-1 md:h-full z-0">
               <InteractiveMap
                 incidents={incidents}
                 watchZones={watchZones}
@@ -172,7 +184,16 @@ export default function App() {
                 onSelectIncident={handleSelectIncident}
                 tileLayerType={tileLayerType}
                 onChangeTileLayer={setTileLayerType}
+                satelliteDetections={detections}
+                showSatellite={showSatellite}
                 className="w-full h-full"
+              />
+
+              <SatelliteLayerControl
+                isOn={showSatellite}
+                onToggle={() => setShowSatellite((on) => !on)}
+                isLoading={isSatelliteLoading}
+                detectionCount={detections.length}
               />
             </div>
 
