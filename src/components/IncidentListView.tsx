@@ -1,5 +1,7 @@
 import React, { useState } from 'react';
 import { Incident, ViewTab } from '../types';
+import { formatDateTime, formatTimeAgo } from '../lib/time';
+import { resolveStatus } from '../lib/status';
 
 interface IncidentListViewProps {
   incidents: Incident[];
@@ -11,8 +13,9 @@ interface IncidentListViewProps {
   onSearchChange: (term: string) => void;
   statusFilter: string;
   onStatusFilterChange: (status: string) => void;
-  isMobileSheetExpanded?: boolean;
-  onToggleMobileSheet?: () => void;
+  /** Mobile uniquement : la liste est-elle dépliée ? Ignoré à partir de `md`. */
+  isOpen: boolean;
+  onClose: () => void;
   totalStats: {
     activeCount: number;
     operacionais: number;
@@ -31,42 +34,24 @@ export const IncidentListView: React.FC<IncidentListViewProps> = ({
   onSearchChange,
   statusFilter,
   onStatusFilterChange,
-  isMobileSheetExpanded = false,
-  onToggleMobileSheet,
+  isOpen,
+  onClose,
   totalStats,
 }) => {
   const [showFilterDropdown, setShowFilterDropdown] = useState(false);
   const [activeChipFilter, setActiveChipFilter] = useState<string>('all');
 
-  // Status color helper for status bar line
-  const getStatusLineColor = (status: Incident['status']) => {
-    switch (status) {
-      case 'Em Resolução':
-        return 'bg-[#fbbf24]'; // Amber
-      case 'Em Curso':
-        return 'bg-[#ef4444]'; // Red
-      case 'Vigilância':
-        return 'bg-[#3b82f6]'; // Blue
-      case 'Conclusão':
-        return 'bg-[#10b981]'; // Green
-      default:
-        return 'bg-[#ffb3ad]';
-    }
-  };
-
-  const getStatusBadgeStyle = (status: Incident['status']) => {
-    switch (status) {
-      case 'Em Resolução':
-        return 'border-[#fbbf24] bg-[#fbbf24]/15 text-[#fbbf24]';
-      case 'Em Curso':
-        return 'border-[#ef4444] bg-[#ef4444]/15 text-[#ef4444]';
-      case 'Vigilância':
-        return 'border-[#3b82f6] bg-[#3b82f6]/15 text-[#3b82f6]';
-      case 'Conclusão':
-        return 'border-[#10b981] bg-[#10b981]/15 text-[#10b981]';
-      default:
-        return 'border-[#ffb3ad] bg-[#ffb3ad]/15 text-[#ffb3ad]';
-    }
+  // Couleurs de statut : registre unique (src/lib/status.ts), appliqué en style
+  // inline. Tailwind ne peut pas générer `bg-[${color}]` à l'exécution — son
+  // scanner lit le source à la compilation, pas les valeurs calculées.
+  const getStatusBadgeStyle = (incident: Incident): React.CSSProperties => {
+    const { color } = resolveStatus(incident.statusCode, incident.status);
+    return {
+      borderColor: color,
+      // 26/255 ≈ 15 % d'opacité, comme la maquette.
+      backgroundColor: `${color}26`,
+      color,
+    };
   };
 
   // Filter incidents based on search, dropdown, and mobile chip filter
@@ -78,7 +63,7 @@ export const IncidentListView: React.FC<IncidentListViewProps> = ({
       inc.district.toLowerCase().includes(searchTerm.toLowerCase()) ||
       inc.municipality.toLowerCase().includes(searchTerm.toLowerCase());
 
-    const matchesStatus = statusFilter === 'all' || inc.status === statusFilter;
+    const matchesStatus = statusFilter === 'all' || String(inc.statusCode) === statusFilter;
 
     let matchesChip = true;
     if (activeChipFilter === '> 100 Ops') {
@@ -86,18 +71,63 @@ export const IncidentListView: React.FC<IncidentListViewProps> = ({
     } else if (activeChipFilter === 'Aerial Assets') {
       matchesChip = inc.meiosAereos > 0;
     } else if (activeChipFilter === 'Resolution') {
-      matchesChip = inc.status === 'Em Resolução';
+      matchesChip = resolveStatus(inc.statusCode, inc.status).ongoing;
     }
 
     return matchesSearch && matchesStatus && matchesChip;
   });
 
+  // Tri par gravité décroissante, puis par ancienneté. Un tri purement
+  // chronologique enterrerait un feu majeur sous des départs mineurs plus récents.
+  const sortedIncidents = [...filteredIncidents].sort((a, b) => {
+    const severityDelta =
+      resolveStatus(b.statusCode, b.status).severity - resolveStatus(a.statusCode, a.status).severity;
+    if (severityDelta !== 0) return severityDelta;
+
+    const resourcesDelta =
+      b.operacionais + b.veiculos * 3 + b.meiosAereos * 20 -
+      (a.operacionais + a.veiculos * 3 + a.meiosAereos * 20);
+    if (resourcesDelta !== 0) return resourcesDelta;
+
+    return b.startedAt - a.startedAt;
+  });
+
+  // Statuts réellement présents, pour que le filtre expose aussi ceux qui
+  // n'étaient pas prévus par la maquette (« Despacho de 1º Alerta », etc.).
+  const availableStatuses = Array.from(
+    new Map(
+      incidents.map((inc) => [inc.statusCode, resolveStatus(inc.statusCode, inc.status)])
+    ).values()
+  ).sort((a, b) => b.severity - a.severity);
+
   return (
-    <aside className="w-full md:w-[380px] lg:w-[400px] h-full bg-[#16191C] border-r border-[#2D3034] flex flex-col pointer-events-auto z-20 shrink-0">
+    <aside
+      aria-hidden={!isOpen}
+      className={`absolute bottom-16 left-0 right-0 z-20 h-[72%] rounded-t-2xl overflow-hidden bg-[#16191C] border-t border-[#2D3034] flex flex-col transition-transform duration-300 ${
+        isOpen ? 'translate-y-0' : 'translate-y-[calc(100%+4rem)] pointer-events-none'
+      } md:static md:bottom-auto md:h-full md:w-[380px] lg:w-[400px] md:translate-y-0 md:pointer-events-auto md:rounded-none md:border-t-0 md:border-r md:shrink-0`}
+    >
+      {/* Barre de fermeture, mobile uniquement. Le résumé rappelle ce que la
+          liste contient, le bouton dit explicitement ce qu'il fait. */}
+      <div className="md:hidden flex items-center justify-between px-4 py-3 bg-[#1e2021] border-b border-[#2D3034] shrink-0">
+        <span className="font-['Inter'] text-[13px] text-[#e5bdb9] tabular-nums">
+          {totalStats.activeCount} ativas · {totalStats.operacionais.toLocaleString('pt-PT')}{' '}
+          operacionais
+        </span>
+        <button
+          type="button"
+          onClick={onClose}
+          className="flex items-center gap-1 px-3 py-1.5 -mr-2 rounded text-[#e2e2e3] hover:bg-[#333536] transition-colors"
+        >
+          <span className="material-symbols-outlined text-[20px]">keyboard_arrow_down</span>
+          <span className="font-['Inter'] text-[13px] font-semibold">Fechar</span>
+        </button>
+      </div>
+
       {/* Top Header Bar inside Sidebar */}
-      <header className="h-16 flex justify-between items-center px-4 border-b border-[#2D3034] bg-[#1e2021]">
+      <header className="hidden md:flex h-16 justify-between items-center px-4 border-b border-[#2D3034] bg-[#1e2021]">
         <div className="flex items-center gap-2">
-          <span class="material-symbols-outlined text-[#ffb3ad] text-2xl">menu</span>
+          <span className="material-symbols-outlined text-[#ffb3ad] text-2xl">menu</span>
           <h1 className="font-['Inter'] text-[20px] font-bold tracking-tight text-[#e2e2e3]">
             FOGO.PT
           </h1>
@@ -110,7 +140,7 @@ export const IncidentListView: React.FC<IncidentListViewProps> = ({
             className="w-8 h-8 flex items-center justify-center rounded hover:bg-[#333536] transition-colors text-[#e5bdb9]"
             title="Pesquisar / Filtrar"
           >
-            <span class="material-symbols-outlined text-[20px]">search</span>
+            <span className="material-symbols-outlined text-[20px]">search</span>
           </button>
           <button
             type="button"
@@ -118,7 +148,7 @@ export const IncidentListView: React.FC<IncidentListViewProps> = ({
             className="w-8 h-8 flex items-center justify-center rounded hover:bg-[#333536] transition-colors text-[#e5bdb9]"
             title="Alertas & Zonas"
           >
-            <span class="material-symbols-outlined text-[20px]">notifications</span>
+            <span className="material-symbols-outlined text-[20px]">notifications</span>
           </button>
         </div>
       </header>
@@ -164,7 +194,7 @@ export const IncidentListView: React.FC<IncidentListViewProps> = ({
       <div className="p-3 border-b border-[#2D3034] bg-[#16191C] flex flex-col gap-2">
         <div className="flex gap-2">
           <div className="flex-1 relative">
-            <span class="material-symbols-outlined absolute left-2.5 top-2.5 text-[#e5bdb9] text-[18px]">
+            <span className="material-symbols-outlined absolute left-2.5 top-2.5 text-[#e5bdb9] text-[18px]">
               search
             </span>
             <input
@@ -185,7 +215,7 @@ export const IncidentListView: React.FC<IncidentListViewProps> = ({
                 : 'border-[#494c4f] text-[#e5bdb9] hover:bg-[#2D3034]'
             }`}
           >
-            <span class="material-symbols-outlined text-[16px]">tune</span>
+            <span className="material-symbols-outlined text-[16px]">tune</span>
             Filtros
           </button>
         </div>
@@ -206,7 +236,7 @@ export const IncidentListView: React.FC<IncidentListViewProps> = ({
               )}
             </div>
             <div className="grid grid-cols-2 gap-1.5">
-              {['all', 'Em Curso', 'Em Resolução', 'Vigilância', 'Conclusão'].map((st) => (
+              {[{ code: 'all', label: 'Todos' }, ...availableStatuses.map((s) => ({ code: String(s.code), label: s.label }))].map(({ code: st, label }) => (
                 <button
                   key={st}
                   type="button"
@@ -217,7 +247,7 @@ export const IncidentListView: React.FC<IncidentListViewProps> = ({
                       : 'bg-[#16191C] text-[#e2e2e3] hover:bg-[#282a2b]'
                   }`}
                 >
-                  {st === 'all' ? 'Todos os estados' : st}
+                  {st === 'all' ? 'Todos os estados' : label}
                 </button>
               ))}
             </div>
@@ -245,10 +275,10 @@ export const IncidentListView: React.FC<IncidentListViewProps> = ({
 
       {/* Incident List */}
       <div className="flex-1 overflow-y-auto divide-y divide-[#2D3034]">
-        {filteredIncidents.map((inc) => {
+        {sortedIncidents.map((inc) => {
           const isSelected = inc.id === selectedIncidentId;
-          const statusLineColor = getStatusLineColor(inc.status);
-          const badgeStyle = getStatusBadgeStyle(inc.status);
+          const statusColor = resolveStatus(inc.statusCode, inc.status).color;
+          const badgeStyle = getStatusBadgeStyle(inc);
 
           return (
             <article
@@ -259,7 +289,10 @@ export const IncidentListView: React.FC<IncidentListViewProps> = ({
               }`}
             >
               {!isSelected && (
-                <div className={`absolute left-0 top-0 bottom-0 w-1 ${statusLineColor}`} />
+                <div
+                  className="absolute left-0 top-0 bottom-0 w-1"
+                  style={{ backgroundColor: statusColor }}
+                />
               )}
 
               <div className="flex justify-between items-start mb-1.5">
@@ -271,14 +304,18 @@ export const IncidentListView: React.FC<IncidentListViewProps> = ({
                     {inc.locationName}
                   </p>
                 </div>
-                <span className="font-['Inter'] text-[12px] text-[#e5bdb9] tabular-nums shrink-0 ml-2">
-                  {inc.timeAgo}
+                <span
+                  className="font-['Inter'] text-[12px] text-[#e5bdb9] tabular-nums shrink-0 ml-2"
+                  title={formatDateTime(inc.startedAt)}
+                >
+                  {formatTimeAgo(inc.startedAt)}
                 </span>
               </div>
 
               <div className="flex items-center gap-2 mb-2.5">
                 <div
-                  className={`px-2 py-0.5 border rounded text-[10px] font-bold uppercase tracking-wider ${badgeStyle}`}
+                  className="px-2 py-0.5 border rounded text-[10px] font-bold uppercase tracking-wider"
+                  style={badgeStyle}
                 >
                   {inc.status}
                 </div>
@@ -286,16 +323,16 @@ export const IncidentListView: React.FC<IncidentListViewProps> = ({
 
               <div className="flex gap-4 text-[13px] tabular-nums text-[#e5bdb9]">
                 <div className="flex items-center gap-1" title="Operacionais no terreno">
-                  <span class="material-symbols-outlined text-[16px]">group</span>
+                  <span className="material-symbols-outlined text-[16px]">group</span>
                   <span className="text-[#e2e2e3] font-semibold">{inc.operacionais}</span>
                 </div>
                 <div className="flex items-center gap-1" title="Veículos de combate">
-                  <span class="material-symbols-outlined text-[16px]">local_fire_department</span>
+                  <span className="material-symbols-outlined text-[16px]">local_fire_department</span>
                   <span className="text-[#e2e2e3] font-semibold">{inc.veiculos}</span>
                 </div>
                 <div className="flex items-center gap-1" title="Meios Aéreos">
                   <span
-                    class={`material-symbols-outlined text-[16px] ${
+                    className={`material-symbols-outlined text-[16px] ${
                       inc.meiosAereos === 0 ? 'opacity-40' : ''
                     }`}
                   >
@@ -314,7 +351,7 @@ export const IncidentListView: React.FC<IncidentListViewProps> = ({
           );
         })}
 
-        {filteredIncidents.length === 0 && (
+        {sortedIncidents.length === 0 && (
           <div className="p-8 text-center text-[#e5bdb9] text-sm">
             Nenhuma ocorrência encontrada para os filtros selecionados.
           </div>

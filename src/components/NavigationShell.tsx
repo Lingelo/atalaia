@@ -1,5 +1,6 @@
 import React from 'react';
 import { ViewTab } from '../types';
+import { formatTimeAgo } from '../lib/time';
 
 interface NavigationShellProps {
   activeTab: ViewTab;
@@ -10,16 +11,19 @@ interface NavigationShellProps {
     veiculos: number;
     meiosAereos: number;
   };
-  onSimulateUpdate: () => void;
-  isSimulating: boolean;
+  /** Date du dernier chargement réussi, ou null tant qu'il n'y en a pas eu. */
+  lastUpdatedAt: number | null;
+  isRefreshing: boolean;
+  onRefresh: () => void;
 }
 
 export const NavigationShell: React.FC<NavigationShellProps> = ({
   activeTab,
   onChangeTab,
   totalStats,
-  onSimulateUpdate,
-  isSimulating,
+  lastUpdatedAt,
+  isRefreshing,
+  onRefresh,
 }) => {
   return (
     <>
@@ -61,20 +65,25 @@ export const NavigationShell: React.FC<NavigationShellProps> = ({
           </span>
         </div>
 
-        {/* Live Simulation Toggle Button */}
+        {/* Fraîcheur des données + rafraîchissement manuel */}
         <div className="px-4 py-2.5 flex items-center justify-center">
           <button
             type="button"
-            onClick={onSimulateUpdate}
-            className={`px-3 py-1.5 rounded text-xs font-bold flex items-center gap-1.5 transition-all ${
-              isSimulating
-                ? 'bg-[#ef4444] text-white animate-pulse'
-                : 'bg-[#282a2b] text-[#ffb3ad] hover:bg-[#333536] border border-[#333536]'
-            }`}
-            title="Ativar/Desativar simulação de atualizações em tempo real"
+            onClick={onRefresh}
+            disabled={isRefreshing}
+            className="px-3 py-1.5 rounded text-xs font-semibold flex items-center gap-1.5 transition-all bg-[#282a2b] text-[#ffb3ad] hover:bg-[#333536] border border-[#333536] disabled:opacity-60"
+            title="Atualizar agora"
           >
-            <span class="material-symbols-outlined text-[16px]">sensors</span>
-            {isSimulating ? 'AO VIVO' : 'Simular Tempo Real'}
+            <span
+              className={`material-symbols-outlined text-[16px] ${isRefreshing ? 'animate-spin' : ''}`}
+            >
+              {isRefreshing ? 'progressbar' : 'refresh'}
+            </span>
+            {isRefreshing
+              ? 'A atualizar…'
+              : lastUpdatedAt
+                ? `Atualizado ${formatTimeAgo(lastUpdatedAt)}`
+                : 'Atualizar'}
           </button>
         </div>
       </div>
@@ -88,7 +97,7 @@ export const NavigationShell: React.FC<NavigationShellProps> = ({
             activeTab === 'dashboard' ? 'text-[#ffb3ad]' : 'text-[#e5bdb9] hover:text-[#e2e2e3]'
           }`}
         >
-          <span class="material-symbols-outlined text-[22px]">map</span>
+          <span className="material-symbols-outlined text-[22px]">map</span>
           <span className="font-['Inter'] text-[11px] font-semibold mt-0.5">Map</span>
         </button>
 
@@ -99,7 +108,7 @@ export const NavigationShell: React.FC<NavigationShellProps> = ({
             activeTab === 'analytics' ? 'text-[#ffb3ad]' : 'text-[#e5bdb9] hover:text-[#e2e2e3]'
           }`}
         >
-          <span class="material-symbols-outlined text-[22px]">analytics</span>
+          <span className="material-symbols-outlined text-[22px]">analytics</span>
           <span className="font-['Inter'] text-[11px] font-semibold mt-0.5">Stats</span>
         </button>
 
@@ -110,7 +119,7 @@ export const NavigationShell: React.FC<NavigationShellProps> = ({
             activeTab === 'watch-zones' ? 'text-[#ffb3ad]' : 'text-[#e5bdb9] hover:text-[#e2e2e3]'
           }`}
         >
-          <span class="material-symbols-outlined text-[22px]">notifications_active</span>
+          <span className="material-symbols-outlined text-[22px]">notifications_active</span>
           <span className="font-['Inter'] text-[11px] font-semibold mt-0.5">Alerts</span>
         </button>
       </nav>

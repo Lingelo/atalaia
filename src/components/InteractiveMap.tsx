@@ -1,6 +1,7 @@
 import React, { useEffect, useRef } from 'react';
 import L from 'leaflet';
 import { Incident, WatchZone, MapTileLayer } from '../types';
+import { resolveStatus } from '../lib/status';
 
 interface InteractiveMapProps {
   incidents: Incident[];
@@ -60,21 +61,7 @@ export const InteractiveMap: React.FC<InteractiveMapProps> = ({
     }
   };
 
-  // Status colors helper
-  const getStatusColor = (status: Incident['status']) => {
-    switch (status) {
-      case 'Em Resolução':
-        return '#fbbf24'; // Amber-400
-      case 'Em Curso':
-        return '#ef4444'; // Red-500
-      case 'Vigilância':
-        return '#3b82f6'; // Blue-500
-      case 'Conclusão':
-        return '#10b981'; // Emerald-500
-      default:
-        return '#ffb3ad';
-    }
-  };
+  // Couleur de statut : voir le registre unique dans src/lib/status.ts.
 
   // Initialize map instance
   useEffect(() => {
@@ -154,15 +141,18 @@ export const InteractiveMap: React.FC<InteractiveMapProps> = ({
 
     incidents.forEach((inc) => {
       const isSelected = inc.id === selectedIncidentId;
-      const color = getStatusColor(inc.status);
+      const meta = resolveStatus(inc.statusCode, inc.status);
+      const color = meta.color;
 
-      // Marker Size based on personnel scale
+      // Taille du marqueur : racine carrée des effectifs, pour que l'aire du disque
+      // reste proportionnelle aux moyens engagés. Plancher à 16 px pour qu'un feu
+      // à 1 opérationnel reste visible et cliquable.
       const ops = inc.operacionais;
       const size = Math.max(16, Math.min(38, Math.round(14 + Math.sqrt(ops) * 1.2)));
 
-      // HTML custom div icon for crisp dark theme marker
+      // Pulsation réservée aux sinistres encore combattus.
       const pulseClass =
-        inc.status === 'Em Curso' ? 'pulse-fire' : inc.status === 'Em Resolução' ? 'pulse-resolucao' : '';
+        meta.code === 5 ? 'pulse-fire' : meta.code === 7 ? 'pulse-resolucao' : '';
 
       const customIcon = L.divIcon({
         className: 'custom-fire-marker',
@@ -335,7 +325,7 @@ export const InteractiveMap: React.FC<InteractiveMapProps> = ({
             title="Aumentar zoom"
             className="w-10 h-10 flex items-center justify-center hover:bg-[#282a2b] transition-colors border-b border-[#2D3034] text-[#e5bdb9] hover:text-[#e2e2e3]"
           >
-            <span class="material-symbols-outlined text-[20px]">add</span>
+            <span className="material-symbols-outlined text-[20px]">add</span>
           </button>
           <button
             type="button"
@@ -343,7 +333,7 @@ export const InteractiveMap: React.FC<InteractiveMapProps> = ({
             title="Diminuir zoom"
             className="w-10 h-10 flex items-center justify-center hover:bg-[#282a2b] transition-colors text-[#e5bdb9] hover:text-[#e2e2e3]"
           >
-            <span class="material-symbols-outlined text-[20px]">remove</span>
+            <span className="material-symbols-outlined text-[20px]">remove</span>
           </button>
         </div>
 
@@ -353,7 +343,7 @@ export const InteractiveMap: React.FC<InteractiveMapProps> = ({
           title="Minha localização / Centrar"
           className="w-10 h-10 bg-[#16191C] border border-[#2D3034] rounded flex items-center justify-center hover:bg-[#282a2b] transition-colors text-[#e5bdb9] hover:text-[#e2e2e3] shadow-lg"
         >
-          <span class="material-symbols-outlined text-[20px]">my_location</span>
+          <span className="material-symbols-outlined text-[20px]">my_location</span>
         </button>
 
         {/* Tile Layer Switcher */}
@@ -363,7 +353,7 @@ export const InteractiveMap: React.FC<InteractiveMapProps> = ({
             title="Camadas do Mapa"
             className="w-10 h-10 bg-[#16191C] border border-[#2D3034] rounded flex items-center justify-center hover:bg-[#282a2b] transition-colors text-[#e5bdb9] hover:text-[#e2e2e3] shadow-lg"
           >
-            <span class="material-symbols-outlined text-[20px]">layers</span>
+            <span className="material-symbols-outlined text-[20px]">layers</span>
           </button>
           <div className="absolute right-12 bottom-0 hidden group-hover:flex flex-col bg-[#16191C] border border-[#2D3034] rounded p-1 shadow-xl whitespace-nowrap min-w-[120px]">
             <button

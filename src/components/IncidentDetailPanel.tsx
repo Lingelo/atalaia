@@ -1,5 +1,32 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { Incident } from '../types';
+import { formatDateTime } from '../lib/time';
+import { resolveStatus } from '../lib/status';
+
+/**
+ * Convertit la ventilation ICNF (hectares absolus) en parts affichables.
+ *
+ * Retourne null si la donnée est absente OU si le total est nul : une barre
+ * empilée à 0 % de partout n'informe pas, elle décore.
+ */
+function useBurnedAreaParts(incident: Incident) {
+  return useMemo(() => {
+    const breakdown = incident.burnedBreakdown;
+    const totalHa = incident.burnedAreaHa;
+    if (!breakdown || totalHa === null || totalHa <= 0) return null;
+
+    const toPct = (ha: number) => Math.round((ha / totalHa) * 100);
+
+    return {
+      totalHa,
+      parts: [
+        { label: 'Povoamento florestal', pct: toPct(breakdown.povoamentoHa), barClass: 'bg-[#ffb3ad]' },
+        { label: 'Mato', pct: toPct(breakdown.matoHa), barClass: 'bg-[#0079a1]' },
+        { label: 'Agrícola', pct: toPct(breakdown.agricolaHa), barClass: 'bg-[#ac8885]' },
+      ],
+    };
+  }, [incident.burnedBreakdown, incident.burnedAreaHa]);
+}
 
 interface IncidentDetailPanelProps {
   incident: Incident;
@@ -15,44 +42,12 @@ export const IncidentDetailPanel: React.FC<IncidentDetailPanelProps> = ({
   onToggleFollow,
 }) => {
   const [copied, setCopied] = useState(false);
+  const burned = useBurnedAreaParts(incident);
 
-  // Status color styles helper
-  const getStatusBadgeStyle = (status: Incident['status']) => {
-    switch (status) {
-      case 'Em Resolução':
-        return {
-          bg: 'bg-[#7bd1fd]/15',
-          border: 'border-[#7bd1fd]',
-          text: 'text-[#7bd1fd]',
-        };
-      case 'Em Curso':
-        return {
-          bg: 'bg-[#ef4444]/15',
-          border: 'border-[#ef4444]',
-          text: 'text-[#ef4444]',
-        };
-      case 'Vigilância':
-        return {
-          bg: 'bg-[#3b82f6]/15',
-          border: 'border-[#3b82f6]',
-          text: 'text-[#3b82f6]',
-        };
-      case 'Conclusão':
-        return {
-          bg: 'bg-[#10b981]/15',
-          border: 'border-[#10b981]',
-          text: 'text-[#10b981]',
-        };
-      default:
-        return {
-          bg: 'bg-[#ffb3ad]/15',
-          border: 'border-[#ffb3ad]',
-          text: 'text-[#ffb3ad]',
-        };
-    }
-  };
-
-  const badgeStyle = getStatusBadgeStyle(incident.status);
+  // Couleur de statut : registre unique (src/lib/status.ts). Auparavant ce
+  // composant colorait « Em Resolução » en cyan alors que la carte et la liste le
+  // peignaient en ambre — même statut, deux couleurs selon l'écran.
+  const statusColor = resolveStatus(incident.statusCode, incident.status).color;
 
   const handleShare = () => {
     const text = `Incêndio em ${incident.title} (${incident.locationName}) - Status: ${incident.status} - Operacionais: ${incident.operacionais}`;
@@ -66,7 +61,9 @@ export const IncidentDetailPanel: React.FC<IncidentDetailPanelProps> = ({
   };
 
   return (
-    <aside className="w-full md:w-[460px] h-full bg-[#16191C] border-l border-[#5c403d]/40 flex flex-col absolute md:relative right-0 top-0 bottom-0 z-30 shadow-[-8px_0_24px_rgba(0,0,0,0.6)] transform translate-x-0 transition-all duration-300">
+    // `bottom-16` sur mobile : sans ça le panneau descend sous la barre d'onglets
+    // fixe (h-16) et sa dernière action, « Seguir esta zona », devient inatteignable.
+    <aside className="w-full md:w-[460px] bg-[#16191C] border-l border-[#5c403d]/40 flex flex-col absolute md:relative right-0 top-0 bottom-16 md:bottom-0 md:h-full z-30 shadow-[-8px_0_24px_rgba(0,0,0,0.6)] transform translate-x-0 transition-all duration-300">
       {/* Mobile Handle (drag indicator on mobile) */}
       <div className="md:hidden w-full flex justify-center pt-2 pb-1 bg-[#16191C]">
         <div className="w-8 h-1 bg-[#2D3034] rounded-full" />
@@ -76,8 +73,14 @@ export const IncidentDetailPanel: React.FC<IncidentDetailPanelProps> = ({
       <header className="p-4 border-b border-[#333536] flex flex-col gap-2 shrink-0 bg-[#16191C]">
         <div className="flex justify-between items-start">
           {/* Status Pill */}
-          <div className={`inline-flex items-center px-2 py-1 rounded border ${badgeStyle.border} ${badgeStyle.bg}`}>
-            <span className={`${badgeStyle.text} font-['Inter'] text-[12px] font-semibold uppercase tracking-wider`}>
+          <div
+            className="inline-flex items-center px-2 py-1 rounded border"
+            style={{ borderColor: statusColor, backgroundColor: `${statusColor}26` }}
+          >
+            <span
+              className="font-['Inter'] text-[12px] font-semibold uppercase tracking-wider"
+              style={{ color: statusColor }}
+            >
               {incident.status}
             </span>
           </div>
@@ -89,13 +92,16 @@ export const IncidentDetailPanel: React.FC<IncidentDetailPanelProps> = ({
             aria-label="Fechar painel"
             className="p-1 text-[#e5bdb9] hover:text-[#e2e2e3] hover:bg-[#333536] rounded transition-colors"
           >
-            <span class="material-symbols-outlined">close</span>
+            <span className="material-symbols-outlined">close</span>
           </button>
         </div>
 
         <div>
+          {/* Titre : la freguesia, l'échelon le plus fin. Le sous-titre porte le
+              contexte « Concelho, Distrito ». Auparavant les deux lignes disaient
+              la même chose à l'envers (« Coimbra, Soure » / « Soure, Coimbra »). */}
           <h1 className="font-['Inter'] text-[28px] font-semibold text-[#e2e2e3] leading-tight">
-            {incident.locationName || incident.title}
+            {incident.title}
           </h1>
           <p className="font-['Inter'] text-[14px] text-[#e5bdb9]">
             {incident.municipality}, {incident.district}
@@ -107,27 +113,27 @@ export const IncidentDetailPanel: React.FC<IncidentDetailPanelProps> = ({
       <div className="flex-1 overflow-y-auto p-4 flex flex-col gap-6">
         {/* Stat Trio */}
         <section className="grid grid-cols-3 gap-0 border border-[#333536] rounded bg-[#121415]/60">
-          <div className="flex flex-col p-3 border-r border-[#333536]">
-            <span className="font-['Inter'] text-[32px] font-bold text-[#e2e2e3] tabular-nums leading-none">
+          <div className="flex flex-col p-3 border-r border-[#333536] min-w-0">
+            <span className="font-['Inter'] text-[24px] md:text-[32px] font-bold text-[#e2e2e3] tabular-nums leading-none">
               {incident.operacionais}
             </span>
-            <span className="font-['Inter'] text-[11px] font-semibold text-[#e5bdb9] uppercase tracking-wider mt-2">
+            <span className="font-['Inter'] text-[10px] md:text-[11px] font-semibold text-[#e5bdb9] uppercase tracking-wide leading-tight break-words mt-2">
               Operacionais
             </span>
           </div>
-          <div className="flex flex-col p-3 border-r border-[#333536]">
-            <span className="font-['Inter'] text-[32px] font-bold text-[#e2e2e3] tabular-nums leading-none">
+          <div className="flex flex-col p-3 border-r border-[#333536] min-w-0">
+            <span className="font-['Inter'] text-[24px] md:text-[32px] font-bold text-[#e2e2e3] tabular-nums leading-none">
               {incident.veiculos}
             </span>
-            <span className="font-['Inter'] text-[11px] font-semibold text-[#e5bdb9] uppercase tracking-wider mt-2">
+            <span className="font-['Inter'] text-[10px] md:text-[11px] font-semibold text-[#e5bdb9] uppercase tracking-wide leading-tight break-words mt-2">
               Veículos
             </span>
           </div>
-          <div className="flex flex-col p-3">
-            <span className="font-['Inter'] text-[32px] font-bold text-[#e2e2e3] tabular-nums leading-none">
+          <div className="flex flex-col p-3 min-w-0">
+            <span className="font-['Inter'] text-[24px] md:text-[32px] font-bold text-[#e2e2e3] tabular-nums leading-none">
               {incident.meiosAereos}
             </span>
-            <span className="font-['Inter'] text-[11px] font-semibold text-[#e5bdb9] uppercase tracking-wider mt-2">
+            <span className="font-['Inter'] text-[10px] md:text-[11px] font-semibold text-[#e5bdb9] uppercase tracking-wide leading-tight break-words mt-2">
               Meios Aéreos
             </span>
           </div>
@@ -145,15 +151,13 @@ export const IncidentDetailPanel: React.FC<IncidentDetailPanelProps> = ({
                 return (
                   <div key={idx} className="relative">
                     <div
-                      className={`absolute left-[-29px] top-1.5 w-[9px] h-[9px] rounded-full border-2 border-[#16191C] ${
-                        isCurrent ? badgeStyle.bg.replace('/15', '') : 'bg-[#333536]'
-                      }`}
+                      className="absolute left-[-29px] top-1.5 w-[9px] h-[9px] rounded-full border-2 border-[#16191C]"
+                      style={{ backgroundColor: isCurrent ? statusColor : '#333536' }}
                     />
                     <div className="flex justify-between items-baseline">
                       <span
-                        className={`font-['Inter'] text-[15px] ${
-                          isCurrent ? `${badgeStyle.text} font-bold` : 'text-[#e2e2e3]'
-                        }`}
+                        className={`font-['Inter'] text-[15px] ${isCurrent ? 'font-bold' : 'text-[#e2e2e3]'}`}
+                        style={isCurrent ? { color: statusColor } : undefined}
                       >
                         {evt.status}
                       </span>
@@ -177,53 +181,46 @@ export const IncidentDetailPanel: React.FC<IncidentDetailPanelProps> = ({
           <h2 className="font-['Inter'] text-[12px] font-semibold text-[#e5bdb9] uppercase tracking-wider mb-3">
             Área Ardida Estimada
           </h2>
-          <div className="mb-2 flex justify-between items-baseline">
-            <span className="font-['Inter'] text-[24px] font-semibold text-[#e2e2e3] tabular-nums">
-              {incident.burnedAreaHa.toLocaleString()}{' '}
-              <span className="font-['Inter'] text-[14px] font-normal text-[#e5bdb9]">ha</span>
-            </span>
-          </div>
+          {burned ? (
+            <>
+              <div className="mb-2 flex justify-between items-baseline">
+                <span className="font-['Inter'] text-[24px] font-semibold text-[#e2e2e3] tabular-nums">
+                  {burned.totalHa.toLocaleString('pt-PT', { maximumFractionDigits: 1 })}{' '}
+                  <span className="font-['Inter'] text-[14px] font-normal text-[#e5bdb9]">ha</span>
+                </span>
+              </div>
 
-          {/* Stacked Multi-color Bar */}
-          <div className="h-4 w-full flex rounded overflow-hidden mb-3 bg-[#121415]">
-            <div
-              className="bg-[#ffb3ad] h-full"
-              style={{ width: `${incident.burnedBreakdown.forestPct}%` }}
-              title={`Povoamento florestal (${incident.burnedBreakdown.forestPct}%)`}
-            />
-            <div
-              className="bg-[#0079a1] h-full"
-              style={{ width: `${incident.burnedBreakdown.matoPct}%` }}
-              title={`Mato (${incident.burnedBreakdown.matoPct}%)`}
-            />
-            <div
-              className="bg-[#ac8885] h-full"
-              style={{ width: `${incident.burnedBreakdown.agricolaPct}%` }}
-              title={`Agrícola (${incident.burnedBreakdown.agricolaPct}%)`}
-            />
-          </div>
+              {/* Barre empilée. Les parts sont calculées à partir des valeurs absolues
+                  de l'ICNF, l'API ne fournissant pas de pourcentages. */}
+              <div className="h-4 w-full flex rounded overflow-hidden mb-3 bg-[#121415]">
+                {burned.parts.map((part) => (
+                  <div
+                    key={part.label}
+                    className={`${part.barClass} h-full`}
+                    style={{ width: `${part.pct}%` }}
+                    title={`${part.label} (${part.pct} %)`}
+                  />
+                ))}
+              </div>
 
-          {/* Legend */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
-            <div className="flex items-center gap-2">
-              <div className="w-2.5 h-2.5 rounded bg-[#ffb3ad]" />
-              <span className="font-['Inter'] text-[13px] text-[#e5bdb9]">
-                Povoamento florestal ({incident.burnedBreakdown.forestPct}%)
-              </span>
-            </div>
-            <div className="flex items-center gap-2">
-              <div className="w-2.5 h-2.5 rounded bg-[#0079a1]" />
-              <span className="font-['Inter'] text-[13px] text-[#e5bdb9]">
-                Mato ({incident.burnedBreakdown.matoPct}%)
-              </span>
-            </div>
-            <div className="flex items-center gap-2">
-              <div className="w-2.5 h-2.5 rounded bg-[#ac8885]" />
-              <span className="font-['Inter'] text-[13px] text-[#e5bdb9]">
-                Agrícola ({incident.burnedBreakdown.agricolaPct}%)
-              </span>
-            </div>
-          </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
+                {burned.parts.map((part) => (
+                  <div key={part.label} className="flex items-center gap-2">
+                    <div className={`w-2.5 h-2.5 rounded ${part.barClass}`} />
+                    <span className="font-['Inter'] text-[13px] text-[#e5bdb9]">
+                      {part.label} ({part.pct} %)
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </>
+          ) : (
+            /* L'ICNF n'estime pas systématiquement la surface — c'était même le cas
+               du plus gros feu actif au relevé. Afficher 0 ha serait un mensonge. */
+            <p className="font-['Inter'] text-[13px] text-[#e5bdb9] italic">
+              Sem dados de área ardida para esta ocorrência.
+            </p>
+          )}
         </section>
 
         <hr className="border-t border-[#333536]" />
@@ -240,15 +237,19 @@ export const IncidentDetailPanel: React.FC<IncidentDetailPanelProps> = ({
             </li>
             <li className="flex justify-between py-2 border-b border-[#333536]/50">
               <span className="text-[#e5bdb9]">Altitude Estimada</span>
-              <span className="text-[#e2e2e3] font-medium tabular-nums">{incident.altitude} m</span>
+              <span className="text-[#e2e2e3] font-medium tabular-nums">
+                {incident.altitude === null ? '—' : `${Math.round(incident.altitude)} m`}
+              </span>
             </li>
             <li className="flex justify-between py-2 border-b border-[#333536]/50">
               <span className="text-[#e5bdb9]">Fonte de Alerta</span>
-              <span className="text-[#e2e2e3] font-medium">{incident.alertSource}</span>
+              <span className="text-[#e2e2e3] font-medium">{incident.alertSource ?? '—'}</span>
             </li>
             <li className="flex justify-between py-2 border-b border-[#333536]/50">
               <span className="text-[#e5bdb9]">Início</span>
-              <span className="text-[#e2e2e3] font-medium tabular-nums">{incident.startTime}</span>
+              <span className="text-[#e2e2e3] font-medium tabular-nums">
+                {formatDateTime(incident.startedAt)}
+              </span>
             </li>
           </ul>
         </section>
@@ -267,7 +268,7 @@ export const IncidentDetailPanel: React.FC<IncidentDetailPanelProps> = ({
             onClick={handleShare}
             className="flex-1 py-2.5 px-3 bg-[#282a2b] hover:bg-[#333536] text-[#e2e2e3] font-['Inter'] text-[14px] rounded flex items-center justify-center gap-2 transition-colors border border-[#333536]"
           >
-            <span class="material-symbols-outlined text-[18px]">share</span>
+            <span className="material-symbols-outlined text-[18px]">share</span>
             Partilhar
           </button>
           <button
@@ -275,7 +276,7 @@ export const IncidentDetailPanel: React.FC<IncidentDetailPanelProps> = ({
             onClick={() => onFocusOnMap(incident)}
             className="flex-1 py-2.5 px-3 bg-[#282a2b] hover:bg-[#333536] text-[#e2e2e3] font-['Inter'] text-[14px] rounded flex items-center justify-center gap-2 transition-colors border border-[#333536]"
           >
-            <span class="material-symbols-outlined text-[18px]">my_location</span>
+            <span className="material-symbols-outlined text-[18px]">my_location</span>
             Ver no mapa
           </button>
         </div>
@@ -288,7 +289,7 @@ export const IncidentDetailPanel: React.FC<IncidentDetailPanelProps> = ({
               : 'bg-white text-black hover:bg-gray-200'
           }`}
         >
-          <span class="material-symbols-outlined text-[18px] material-symbols-filled">
+          <span className="material-symbols-outlined text-[18px] material-symbols-filled">
             {incident.isFollowing ? 'notifications_active' : 'notifications'}
           </span>
           {incident.isFollowing ? 'A seguir esta zona' : 'Seguir esta zona'}

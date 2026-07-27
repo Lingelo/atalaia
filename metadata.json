@@ -1,6 +1,0 @@
-{
-  "name": "FOGO.PT - Wildfire Monitor",
-  "description": "Real-time wildfire monitoring system for Portugal with live dark maps, incident tracking, historical analytics, and watch zone alerts.",
-  "requestFramePermissions": [],
-  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
-}
