@@ -116,9 +116,14 @@ export const proxyFogos = createUpstreamProxy({
 /**
  * Détections thermiques satellite (NASA FIRMS).
  *
- * Les fichiers « Europe 24h » sont publics et ne demandent aucune clé — vérifié
- * le 27/07/2026. TTL long : les satellites repassent toutes les quelques heures,
- * et chaque fichier pèse ~300 Ko.
+ * Les fichiers « 24h » sont publics et ne demandent aucune clé — vérifié le
+ * 30/07/2026. TTL long : les satellites repassent toutes les quelques heures.
+ *
+ * ⚠️ Depuis le passage à la couverture MONDIALE, chaque fichier pèse ~7 Mo (et
+ * non ~300 Ko comme les anciens fichiers limités à l'Europe), soit 21 Mo pour
+ * les trois satellites. Ce relais n'est donc PAS le chemin normal : même en
+ * développement, l'application lit le jeu précalculé. Il ne sert qu'à vérifier
+ * le pipeline de bout en bout, avec VITE_FIRMS_LIVE=1 (voir src/api/firms.ts).
  */
 export const proxyFirms = createUpstreamProxy({
   origin: 'https://firms.modaps.eosdis.nasa.gov',

@@ -3,8 +3,6 @@ name: Déploiement GitHub Pages
 on:
   push:
     branches: [main]
-  # Les satellites VIIRS repassent toutes les quelques heures : republier plus
-  # souvent ne ferait que retélécharger les mêmes CSV.
   # Les incidents de la protection civile évoluent à la minute ; les satellites
   # ne repassent que toutes les quelques heures. C'est donc le premier qui fixe
   # la cadence. Un cron GitHub se déclenche au mieux toutes les 5 minutes et se
@@ -39,14 +37,51 @@ jobs:
       - name: Vérifier le typage
         run: npm run lint
 
-      # NASA FIRMS ne renvoie aucun en-tête CORS : le navigateur ne peut pas
-      # l'interroger depuis un site statique. On précalcule donc les foyers ici.
       # NASA FIRMS ne renvoie aucun en-tête CORS, et api.fogos.pt n'en renvoie
       # pas non plus sur les GET : un site statique ne peut interroger ni l'un
       # ni l'autre. On récupère donc les deux ici, où la politique d'origine ne
-      # s'applique pas.
-      - name: Précalculer les données
+      # s'applique pas. Les trois services espagnols, eux, accepteraient un
+      # appel direct depuis le navigateur ; ils sont récupérés ici quand même,
+      # pour que tout le jeu porte une seule et même date de production.
+      - name: Précalculer les données temps réel
         run: npm run build:data
+
+      # L'HISTORIQUE EST MIS EN CACHE À LA JOURNÉE, et c'est le point important
+      # de ce workflow.
+      #
+      # `build:history` parcourt l'archive portugaise page par page. Or
+      # api.fogos.pt, derrière Cloudflare, n'accepte qu'environ cinq requêtes
+      # par fenêtre de quinze secondes : le script est donc volontairement lent
+      # (plusieurs minutes). L'exécuter toutes les quinze minutes le ferait
+      # tourner en permanence, pour recalculer des décomptes annuels qui ne
+      # bougent pas d'un quart d'heure sur l'autre — et finirait par faire
+      # bannir notre adresse.
+      #
+      # La clé porte la date du jour : au premier build de la journée le cache
+      # est vide et le script tourne ; les suivants restaurent le fichier en une
+      # seconde.
+      - name: Date du jour (clé de cache)
+        id: day
+        run: echo "value=$(date -u +%Y-%m-%d)" >> "$GITHUB_OUTPUT"
+
+      - name: Restaurer l'historique
+        id: history-cache
+        uses: actions/cache@v4
+        with:
+          path: public/data/history.json
+          key: history-${{ steps.day.outputs.value }}
+          # Repli sur l'historique de la veille : une archive vieille d'un jour
+          # vaut infiniment mieux qu'un onglet Historique vide si l'agrégation
+          # échoue aujourd'hui.
+          restore-keys: history-
+
+      - name: Agréger l'historique
+        if: steps.history-cache.outputs.cache-hit != 'true'
+        # Une panne de l'archive ne doit PAS empêcher de publier la carte temps
+        # réel, qui est la fonction principale du site. L'onglet Historique
+        # signalera lui-même son indisponibilité.
+        continue-on-error: true
+        run: npm run build:history
 
       - name: Construire le site
         run: npm run build

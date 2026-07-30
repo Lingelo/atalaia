@@ -1,9 +1,10 @@
 import React, { useEffect, useRef, useState } from 'react';
 import L from 'leaflet';
-import { Incident, WatchZone, MapTileLayer, SatelliteDetection } from '../types';
-import { resolveStatus } from '../lib/status';
+import { Incident, WatchZone, MapTileLayer, SatelliteDetection, ViewScope } from '../types';
+import { resolvePhase } from '../lib/status';
 import { formatTimeAgo } from '../lib/time';
 import { SatelliteHeatLayer } from './map/SatelliteHeatLayer';
+import { SpatialIndex } from './map/spatialIndex';
 import { useI18n } from '../i18n/context';
 
 /**
@@ -25,6 +26,8 @@ interface InteractiveMapProps {
   /** Couche satellite, distincte des incidents opérationnels. Voir src/api/firms.ts. */
   satelliteDetections?: SatelliteDetection[];
   showSatellite?: boolean;
+  /** Cadrage initial de la carte. Le mode Monde ne s'ouvre pas sur le Portugal. */
+  scope?: ViewScope;
   isPickerMode?: boolean;
   pickerPos?: { lat: number; lng: number; radiusKm: number };
   onPickerPosChange?: (lat: number, lng: number) => void;
@@ -40,6 +43,7 @@ export const InteractiveMap: React.FC<InteractiveMapProps> = ({
   onChangeTileLayer,
   satelliteDetections = [],
   showSatellite = false,
+  scope = 'iberia',
   isPickerMode = false,
   pickerPos,
   onPickerPosChange,
@@ -60,6 +64,7 @@ export const InteractiveMap: React.FC<InteractiveMapProps> = ({
   const canvasRendererRef = useRef<L.Canvas | null>(null);
   const pickerMarkerRef = useRef<L.Circle | null>(null);
   const heatLayerRef = useRef<SatelliteHeatLayer | null>(null);
+  const satelliteIndexRef = useRef<SpatialIndex<SatelliteDetection> | null>(null);
   const { t, intlTag } = useI18n();
   const [zoom, setZoom] = useState(7);
   /** Incrémenté à chaque déplacement : redéclenche le filtrage des anneaux. */
@@ -176,18 +181,25 @@ export const InteractiveMap: React.FC<InteractiveMapProps> = ({
 
     incidents.forEach((inc) => {
       const isSelected = inc.id === selectedIncidentId;
-      const meta = resolveStatus(inc.statusCode, inc.status);
+      const meta = resolvePhase(inc.phase);
       const color = meta.color;
 
       // Taille du marqueur : racine carrée des effectifs, pour que l'aire du disque
       // reste proportionnelle aux moyens engagés. Plancher à 16 px pour qu'un feu
       // à 1 opérationnel reste visible et cliquable.
-      const ops = inc.operacionais;
-      const size = Math.max(16, Math.min(38, Math.round(14 + Math.sqrt(ops) * 1.2)));
+      //
+      // ⚠️ `personnel` vaut `null` chez les services qui ne le publient pas. Un
+      // marqueur dimensionné à 0 y serait le plus PETIT de la carte, donnant à
+      // lire « incident négligeable » là où on ne sait simplement pas. On rend
+      // donc ces marqueurs à une taille médiane, et le disque creux ci-dessous
+      // signale que le chiffre manque.
+      const ops = inc.personnel;
+      const size =
+        ops === null ? 22 : Math.max(16, Math.min(38, Math.round(14 + Math.sqrt(ops) * 1.2)));
 
       // Pulsation réservée aux sinistres encore combattus.
       const pulseClass =
-        meta.code === 5 ? 'pulse-fire' : meta.code === 7 ? 'pulse-resolucao' : '';
+        inc.phase === 'active' ? 'pulse-fire' : inc.phase === 'controlled' ? 'pulse-resolucao' : '';
 
       const customIcon = L.divIcon({
         className: 'custom-fire-marker',
@@ -207,9 +219,11 @@ export const InteractiveMap: React.FC<InteractiveMapProps> = ({
             transform: scale(${isSelected ? 1.2 : 1});
           " class="${pulseClass}">
             ${
-              size > 22
-                ? `<span style="font-size: ${Math.round(size * 0.45)}px; font-weight: 700; color: #121415; line-height: 1;">${inc.operacionais}</span>`
-                : `<div style="width: 4px; height: 4px; background: #121415; border-radius: 50%;"></div>`
+              ops === null
+                ? `<div style="width: 8px; height: 8px; border: 2px solid #121415; border-radius: 50%;"></div>`
+                : size > 22
+                  ? `<span style="font-size: ${Math.round(size * 0.45)}px; font-weight: 700; color: #121415; line-height: 1;">${ops}</span>`
+                  : `<div style="width: 4px; height: 4px; background: #121415; border-radius: 50%;"></div>`
             }
           </div>
         `,
@@ -230,7 +244,7 @@ export const InteractiveMap: React.FC<InteractiveMapProps> = ({
         <div style="padding: 2px 4px; font-family: Inter, sans-serif; font-size: 12px;">
           <div style="font-weight: 700; color: #ffffff;">${inc.title} (${inc.locationName})</div>
           <div style="color: ${color}; font-weight: 600; font-size: 11px; text-transform: uppercase;">${inc.status}</div>
-          <div style="color: #babcc0; margin-top: 2px;">👥 ${inc.operacionais} op · 🚒 ${inc.veiculos} veí</div>
+          <div style="color: #babcc0; margin-top: 2px;">👥 ${inc.personnel ?? '—'} · 🚒 ${inc.vehicles ?? '—'} · ✈ ${inc.aircraft ?? '—'}</div>
         </div>
       `,
         {
@@ -258,6 +272,11 @@ export const InteractiveMap: React.FC<InteractiveMapProps> = ({
       }
     });
   }, [incidents, selectedIncidentId, isPickerMode, onSelectIncident]);
+
+  // Index des foyers, reconstruit uniquement quand le jeu change.
+  useEffect(() => {
+    satelliteIndexRef.current = new SpatialIndex(satelliteDetections);
+  }, [satelliteDetections]);
 
   // Suit le zoom (qui commande la bascule nappe / anneaux) et les déplacements
   // (dont dépend le filtrage des anneaux sur l'emprise visible).
@@ -317,10 +336,17 @@ export const InteractiveMap: React.FC<InteractiveMapProps> = ({
     if (!showSatellite || isPickerMode || zoom < DETAIL_ZOOM) return;
 
     // Seuls les foyers visibles sont tracés : au-delà du seuil de zoom, l'emprise
-    // à l'écran n'en contient qu'une poignée sur les onze cents.
+    // à l'écran n'en contient qu'une poignée sur les 86 000 du jeu mondial.
+    // L'index évite d'avoir à tester les 86 000 pour en retenir trois.
     const bounds = mapRef.current.getBounds().pad(0.25);
+    const candidates = satelliteIndexRef.current?.within(
+      bounds.getSouth(),
+      bounds.getWest(),
+      bounds.getNorth(),
+      bounds.getEast()
+    ) ?? satelliteDetections;
 
-    satelliteDetections.forEach((detection) => {
+    candidates.forEach((detection) => {
       if (!bounds.contains([detection.lat, detection.lng])) return;
       // Rayon proportionnel à la racine quatrième de la puissance radiative :
       // celle-ci s'étale de 0,2 à 789 MW, une échelle linéaire écraserait tout.
@@ -372,7 +398,7 @@ export const InteractiveMap: React.FC<InteractiveMapProps> = ({
         fillOpacity: 0.08,
       });
 
-      circle.bindTooltip(`Zone: ${zone.name} (${zone.radiusKm} km)`, {
+      circle.bindTooltip(`${zone.name} · ${zone.radiusKm} km`, {
         direction: 'center',
         permanent: false,
       });
@@ -408,6 +434,32 @@ export const InteractiveMap: React.FC<InteractiveMapProps> = ({
     }
   }, [isPickerMode, pickerPos]);
 
+  /**
+   * Recadre la carte quand on change de périmètre.
+   *
+   * Sans cela, passer en mode Monde laisserait la vue sur le Portugal : les
+   * 86 000 foyers seraient bien chargés, mais l'utilisateur n'en verrait que la
+   * poignée ibérique et conclurait que « mondial » ne change rien.
+   *
+   * Le recadrage ne s'applique QU'au changement de périmètre, et pas à chaque
+   * rendu : reposition­ner la carte pendant que l'utilisateur la déplace serait
+   * insupportable.
+   */
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || isPickerMode) return;
+
+    const framing: Record<ViewScope, { center: [number, number]; zoom: number }> = {
+      portugal: { center: [39.5, -8.0], zoom: 7 },
+      spain: { center: [40.0, -3.7], zoom: 6 },
+      iberia: { center: [39.8, -5.5], zoom: 6 },
+      world: { center: [15, 10], zoom: 2 },
+    };
+
+    const { center, zoom } = framing[scope];
+    map.flyTo(center, zoom, { duration: 0.8 });
+  }, [scope, isPickerMode]);
+
   // Fly to selected incident location
   useEffect(() => {
     if (!mapRef.current || !selectedIncidentId) return;
@@ -423,7 +475,10 @@ export const InteractiveMap: React.FC<InteractiveMapProps> = ({
   // Controls helper functions
   const handleZoomIn = () => mapRef.current?.zoomIn();
   const handleZoomOut = () => mapRef.current?.zoomOut();
-  const handleResetView = () => mapRef.current?.flyTo([39.5, -8.0], 7);
+  const handleResetView = () =>
+    scope === 'world'
+      ? mapRef.current?.flyTo([15, 10], 2)
+      : mapRef.current?.flyTo([39.8, -5.5], 6);
   const handleLocateMe = () => {
     if ('geolocation' in navigator) {
       navigator.geolocation.getCurrentPosition(
@@ -450,7 +505,7 @@ export const InteractiveMap: React.FC<InteractiveMapProps> = ({
           <button
             type="button"
             onClick={handleZoomIn}
-            title="Aumentar zoom"
+            title={t('map.zoomIn')}
             className="w-10 h-10 flex items-center justify-center hover:bg-[#282a2b] transition-colors border-b border-[#2D3034] text-[#e5bdb9] hover:text-[#e2e2e3]"
           >
             <span className="material-symbols-outlined text-[20px]">add</span>
@@ -458,7 +513,7 @@ export const InteractiveMap: React.FC<InteractiveMapProps> = ({
           <button
             type="button"
             onClick={handleZoomOut}
-            title="Diminuir zoom"
+            title={t('map.zoomOut')}
             className="w-10 h-10 flex items-center justify-center hover:bg-[#282a2b] transition-colors text-[#e5bdb9] hover:text-[#e2e2e3]"
           >
             <span className="material-symbols-outlined text-[20px]">remove</span>
@@ -468,7 +523,7 @@ export const InteractiveMap: React.FC<InteractiveMapProps> = ({
         <button
           type="button"
           onClick={handleLocateMe}
-          title="Minha localização / Centrar"
+          title={t('map.locate')}
           className="w-10 h-10 bg-[#16191C] border border-[#2D3034] rounded flex items-center justify-center hover:bg-[#282a2b] transition-colors text-[#e5bdb9] hover:text-[#e2e2e3] shadow-lg"
         >
           <span className="material-symbols-outlined text-[20px]">my_location</span>
@@ -478,7 +533,7 @@ export const InteractiveMap: React.FC<InteractiveMapProps> = ({
         <div className="relative group">
           <button
             type="button"
-            title="Camadas do Mapa"
+            title={t('map.layers')}
             className="w-10 h-10 bg-[#16191C] border border-[#2D3034] rounded flex items-center justify-center hover:bg-[#282a2b] transition-colors text-[#e5bdb9] hover:text-[#e2e2e3] shadow-lg"
           >
             <span className="material-symbols-outlined text-[20px]">layers</span>
@@ -491,7 +546,7 @@ export const InteractiveMap: React.FC<InteractiveMapProps> = ({
                 tileLayerType === 'dark' ? 'bg-[#ffb3ad] text-[#680009] font-bold' : 'text-[#e2e2e3] hover:bg-[#282a2b]'
               }`}
             >
-              Escuro (Padrão)
+              {t('map.layerDark')}
             </button>
             <button
               type="button"
@@ -500,7 +555,7 @@ export const InteractiveMap: React.FC<InteractiveMapProps> = ({
                 tileLayerType === 'satellite' ? 'bg-[#ffb3ad] text-[#680009] font-bold' : 'text-[#e2e2e3] hover:bg-[#282a2b]'
               }`}
             >
-              Satélite
+              {t('map.layerSatellite')}
             </button>
             <button
               type="button"
@@ -509,7 +564,7 @@ export const InteractiveMap: React.FC<InteractiveMapProps> = ({
                 tileLayerType === 'terrain' ? 'bg-[#ffb3ad] text-[#680009] font-bold' : 'text-[#e2e2e3] hover:bg-[#282a2b]'
               }`}
             >
-              Topográfico
+              {t('map.layerTerrain')}
             </button>
           </div>
         </div>

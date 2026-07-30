@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 
-import { fetchActiveIncidents } from '../api/fogos';
+import { fetchOperationalIncidents } from '../api/incidents.ts';
+import type { SourceReport } from '../api/spain/index.ts';
 import type { Incident } from '../types';
 
 /**
@@ -13,6 +14,8 @@ const REFRESH_MS = 60_000;
 
 export interface ActiveIncidentsState {
   incidents: Incident[];
+  /** État de chacun des quatre services interrogés. Voir `SourceReport`. */
+  reports: SourceReport[];
   /** Vrai uniquement pendant le tout premier chargement, quand il n'y a rien à afficher. */
   isLoading: boolean;
   /** Vrai pendant un rechargement alors que des données sont déjà à l'écran. */
@@ -24,6 +27,7 @@ export interface ActiveIncidentsState {
 
 export function useActiveIncidents(): ActiveIncidentsState {
   const [incidents, setIncidents] = useState<Incident[]>([]);
+  const [reports, setReports] = useState<SourceReport[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -43,8 +47,9 @@ export function useActiveIncidents(): ActiveIncidentsState {
     if (hasDataRef.current) setIsRefreshing(true);
 
     try {
-      const next = await fetchActiveIncidents(controller.signal);
+      const next = await fetchOperationalIncidents(controller.signal);
       setIncidents(next.incidents);
+      setReports(next.reports);
       // Date de PRODUCTION de la donnée, pas du téléchargement : sur un site
       // statique elle peut avoir une demi-heure, et l'utilisateur doit le voir.
       setLastUpdatedAt(next.generatedAt);
@@ -76,6 +81,7 @@ export function useActiveIncidents(): ActiveIncidentsState {
 
   return {
     incidents,
+    reports,
     isLoading,
     isRefreshing,
     error,

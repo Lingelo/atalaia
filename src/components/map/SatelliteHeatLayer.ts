@@ -1,6 +1,7 @@
 import L from 'leaflet';
 
 import type { SatelliteDetection } from '../../types';
+import { SpatialIndex } from './spatialIndex';
 
 /**
  * Nappe de densité pour les détections satellite.
@@ -61,18 +62,34 @@ function buildPalette(): Uint8ClampedArray {
 }
 
 export class SatelliteHeatLayer extends L.Layer {
-  private detections: SatelliteDetection[];
+  /**
+   * Index reconstruit à chaque changement de jeu, jamais à chaque redessin :
+   * indexer 86 000 foyers coûte quelques millisecondes, les redessins sont
+   * beaucoup plus fréquents que les rafraîchissements de données.
+   */
+  private index: SpatialIndex<SatelliteDetection>;
   private canvas: HTMLCanvasElement | null = null;
   private palette: Uint8ClampedArray | null = null;
   private frame: number | null = null;
+  /**
+   * Puissance maximale du jeu ENTIER, pas de la portion visible.
+   *
+   * ⚠️ La calculer sur les seuls foyers à l'écran ferait varier l'échelle de
+   * couleur au fil des déplacements : un feu modeste paraîtrait intense dès
+   * qu'on cadre une région calme. La densité doit rester comparable d'une vue à
+   * l'autre.
+   */
+  private maxFrp = 1;
 
   constructor(detections: SatelliteDetection[]) {
     super();
-    this.detections = detections;
+    this.index = new SpatialIndex(detections);
+    this.maxFrp = detections.reduce((max, d) => Math.max(max, d.frpMw), 1);
   }
 
   setDetections(detections: SatelliteDetection[]): void {
-    this.detections = detections;
+    this.index = new SpatialIndex(detections);
+    this.maxFrp = detections.reduce((max, d) => Math.max(max, d.frpMw), 1);
     this.scheduleRedraw();
   }
 
@@ -156,9 +173,20 @@ export class SatelliteHeatLayer extends L.Layer {
     // contributions, ce qui produit la densité.
     ctx.globalCompositeOperation = 'lighter';
 
-    const maxFrp = this.detections.reduce((max, d) => Math.max(max, d.frpMw), 1);
+    const maxFrp = this.maxFrp;
 
-    for (const detection of this.detections) {
+    // Seuls les foyers dont la cellule recoupe l'écran sont projetés. Sur un jeu
+    // mondial zoomé sur une région, cela remplace 86 000 projections par
+    // quelques centaines.
+    const bounds = map.getBounds().pad(0.3);
+    const visible = this.index.within(
+      bounds.getSouth(),
+      bounds.getWest(),
+      bounds.getNorth(),
+      bounds.getEast()
+    );
+
+    for (const detection of visible) {
       const point = map.latLngToContainerPoint([detection.lat, detection.lng]);
       if (
         point.x < -PADDING_PX ||
