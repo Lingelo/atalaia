@@ -1,11 +1,11 @@
 import { useState, useMemo } from 'react';
-import { Incident, WatchZone, ViewTab, MapTileLayer, ViewScope } from './types';
-import { INITIAL_WATCH_ZONES } from './data/mockData';
+import { Incident, ViewTab, MapTileLayer, ViewScope } from './types';
 import { useActiveIncidents } from './hooks/useActiveIncidents';
 import { useSatelliteDetections } from './hooks/useSatelliteDetections';
+import { useWatchZones, useZoneAlerts } from './hooks/useWatchZones';
 import { SatelliteLayerControl } from './components/SatelliteLayerControl';
 import { SatelliteListView } from './components/SatelliteListView';
-import { resolveStatus } from './lib/status';
+import { computeStats, filterByScope } from './lib/scope';
 import { InteractiveMap } from './components/InteractiveMap';
 import { IncidentListView } from './components/IncidentListView';
 import { IncidentDetailPanel } from './components/IncidentDetailPanel';
@@ -19,6 +19,7 @@ export default function App() {
 
   const {
     incidents: fetchedIncidents,
+    reports,
     isLoading,
     isRefreshing,
     error,
@@ -26,7 +27,8 @@ export default function App() {
     refresh,
   } = useActiveIncidents();
 
-  const [watchZones, setWatchZones] = useState<WatchZone[]>(INITIAL_WATCH_ZONES);
+  const { zones: watchZones, addZone, toggleZone, deleteZone } = useWatchZones();
+
   const [activeTab, setActiveTab] = useState<ViewTab>('dashboard');
   const [selectedIncidentId, setSelectedIncidentId] = useState<string | null>(null);
   const [tileLayerType, setTileLayerType] = useState<MapTileLayer>('dark');
@@ -42,22 +44,20 @@ export default function App() {
   /**
    * Périmètre affiché.
    *
-   * Les données opérationnelles (effectifs, statuts, chronologie) n'existent
-   * qu'au Portugal : vérifié, la Catalogne ne publie ni coordonnées ni effectifs
-   * et accuse six jours de retard, la France ne diffuse que des statistiques
-   * annuelles. Un mode européen qui prétendrait décrire des moyens afficherait
-   * « 0 opérationnel » partout, ce qui laisserait croire qu'il y brûle moins.
-   *
-   * Chaque mode est donc homogène de bout en bout : bandeau, liste et carte
-   * décrivent la même chose.
+   * Trois périmètres OPÉRATIONNELS — Portugal, Espagne, péninsule — et un
+   * périmètre SATELLITE mondial. La séparation tient toujours, mais plus pour la
+   * raison qu'elle avait à l'origine : il ne s'agit plus de compenser l'absence
+   * de données espagnoles (trois services régionaux les publient bel et bien,
+   * voir src/api/spain/), mais de ne pas confondre un sinistre confirmé au sol
+   * avec une anomalie thermique vue de l'orbite.
    */
-  const [scope, setScope] = useState<ViewScope>('portugal');
+  const [scope, setScope] = useState<ViewScope>('iberia');
 
-  // La couche satellite est le SUJET en mode Europe, et un simple calque
-  // facultatif en mode Portugal (utile pour repérer un départ que l'ANEPC n'a
-  // pas encore enregistré). Rien n'est téléchargé tant qu'elle n'est pas demandée.
+  // La couche satellite est le SUJET en mode Monde, et un simple calque
+  // facultatif ailleurs (utile pour repérer un départ qu'aucun service n'a
+  // encore enregistré). Rien n'est téléchargé tant qu'elle n'est pas demandée.
   const [showSatelliteOverlay, setShowSatelliteOverlay] = useState(false);
-  const showSatellite = scope === 'europe' || showSatelliteOverlay;
+  const showSatellite = scope === 'world' || showSatelliteOverlay;
   const { detections, isLoading: isSatelliteLoading } = useSatelliteDetections(showSatellite);
 
   // Liste mobile : ouverte ou fermée, rien de plus.
@@ -70,55 +70,47 @@ export default function App() {
   // la première chose visible sur téléphone.
   const [isListOpen, setIsListOpen] = useState(false);
 
-  const incidents = useMemo(
+  const allIncidents = useMemo(
     () => fetchedIncidents.map((inc) => ({ ...inc, isFollowing: followedIds.has(inc.id) })),
     [fetchedIncidents, followedIds]
   );
 
-  // Totaux nationaux. « Ativas » s'appuie sur statusCode via le registre, et non
-  // sur une comparaison de libellés : un accent ou un statut non prévu fausserait
-  // silencieusement le compteur.
-  const totalStats = useMemo(() => {
-    let activeCount = 0;
-    let operacionais = 0;
-    let veiculos = 0;
-    let meiosAereos = 0;
+  // Les alertes portent sur TOUS les incidents, quel que soit le périmètre
+  // affiché : une zone de surveillance en Andalousie doit se déclencher même si
+  // l'utilisateur regarde le Portugal à l'écran.
+  useZoneAlerts(watchZones, allIncidents);
 
-    incidents.forEach((inc) => {
-      if (resolveStatus(inc.statusCode, inc.status).ongoing) activeCount += 1;
-      operacionais += inc.operacionais;
-      veiculos += inc.veiculos;
-      meiosAereos += inc.meiosAereos;
-    });
+  const incidents = useMemo(() => filterByScope(allIncidents, scope), [allIncidents, scope]);
 
-    return { activeCount, operacionais, veiculos, meiosAereos };
-  }, [incidents]);
+  /** Totaux du périmètre. Voir `computeStats` pour ce qui s'additionne ou non. */
+  const totalStats = useMemo(() => computeStats(incidents), [incidents]);
 
   /**
    * Chiffres et libellés du bandeau, gouvernés par le périmètre.
    *
-   * En mode Europe on ne réutilise SURTOUT PAS les tuiles opérationnelles : on
+   * En mode Monde on ne réutilise SURTOUT PAS les tuiles opérationnelles : on
    * décrit des foyers, une puissance et une couverture, pas des pompiers.
    */
   const satelliteStats = useMemo(() => {
     const strongest = detections.reduce((max, d) => Math.max(max, d.frpMw), 0);
     return {
       activeCount: detections.length,
-      operacionais: Math.round(strongest),
-      veiculos: detections.filter((d) => d.confidence === 'high').length,
-      meiosAereos: detections.filter((d) => d.passes > 1).length,
+      personnel: Math.round(strongest),
+      vehicles: detections.filter((d) => d.confidence === 'high').length,
+      aircraft: new Set(detections.map((d) => d.countryCode).filter(Boolean)).size,
+      personnelIsPartial: false,
     };
   }, [detections]);
 
-  const displayedStats = scope === 'europe' ? satelliteStats : totalStats;
+  const displayedStats = scope === 'world' ? satelliteStats : totalStats;
 
   const statLabels: [string, string, string, string] =
-    scope === 'europe'
+    scope === 'world'
       ? [
           t('stats.detections'),
           `MW · ${t('stats.strongest')}`,
           t('stats.highConfidence'),
-          t('stats.multiPass'),
+          t('stats.countriesAffected'),
         ]
       : [
           t('stats.activeOccurrences'),
@@ -144,24 +136,6 @@ export default function App() {
       else next.add(incidentId);
       return next;
     });
-  };
-
-  const handleAddWatchZone = (newZone: Omit<WatchZone, 'id'>) => {
-    const created: WatchZone = {
-      ...newZone,
-      id: `zone-${Date.now()}`,
-    };
-    setWatchZones((prev) => [created, ...prev]);
-  };
-
-  const handleToggleWatchZone = (id: string) => {
-    setWatchZones((prev) =>
-      prev.map((z) => (z.id === id ? { ...z, active: !z.active } : z))
-    );
-  };
-
-  const handleDeleteWatchZone = (id: string) => {
-    setWatchZones((prev) => prev.filter((z) => z.id !== id));
   };
 
   return (
@@ -193,6 +167,7 @@ export default function App() {
         lastUpdatedAt={lastUpdatedAt}
         isRefreshing={isRefreshing}
         onRefresh={refresh}
+        reports={reports}
       />
 
       {/* Main View Container */}
@@ -209,10 +184,10 @@ export default function App() {
         {/* TAB 1: DASHBOARD / LIVE MAP */}
         {activeTab === 'dashboard' && (
           <div className="flex-1 relative w-full h-full md:flex md:flex-row overflow-hidden">
-            {/* Liste : elle décrit CE QUE le périmètre contient. En mode Europe,
+            {/* Liste : elle décrit CE QUE le périmètre contient. En mode Monde,
                 réutiliser les lignes opérationnelles aurait rempli la colonne de
                 « 0 opérationnel », ce qui serait faux. */}
-            {scope === 'europe' ? (
+            {scope === 'world' ? (
               <SatelliteListView
                 detections={detections}
                 isLoading={isSatelliteLoading}
@@ -224,8 +199,6 @@ export default function App() {
               incidents={incidents}
               selectedIncidentId={selectedIncidentId}
               onSelectIncident={handleSelectIncident}
-              activeTab={activeTab}
-              onChangeTab={setActiveTab}
               searchTerm={searchTerm}
               onSearchChange={setSearchTerm}
               statusFilter={statusFilter}
@@ -251,13 +224,14 @@ export default function App() {
                 onChangeTileLayer={setTileLayerType}
                 satelliteDetections={detections}
                 showSatellite={showSatellite}
+                scope={scope}
                 className="w-full h-full"
               />
 
-              {/* En mode Europe, la liste porte déjà le titre, le compteur et
+              {/* En mode Monde, la liste porte déjà le titre, le compteur et
                   l'avertissement : l'encart ferait doublon. Il ne sert que de
-                  calque facultatif en mode Portugal. */}
-              {scope === 'portugal' && (
+                  calque facultatif sur les périmètres opérationnels. */}
+              {scope !== 'world' && (
               <SatelliteLayerControl
                 isOn={showSatellite}
                 onToggle={() => setShowSatelliteOverlay((on) => !on)}
@@ -271,7 +245,7 @@ export default function App() {
                 est ouverte (elle porte alors son propre bouton de fermeture) et
                 quand un incident est sélectionné, pour ne pas flotter au-dessus
                 du panneau de détail. */}
-            {!isListOpen && !(selectedIncident && scope === 'portugal') && (
+            {!isListOpen && !selectedIncident && (
               <button
                 type="button"
                 onClick={() => setIsListOpen(true)}
@@ -279,7 +253,7 @@ export default function App() {
               >
                 <span className="material-symbols-outlined text-[20px] text-[#ffb3ad]">list</span>
                 <span className="font-['Inter'] text-[14px] font-semibold tabular-nums whitespace-nowrap">
-                  {scope === 'europe'
+                  {scope === 'world'
                     ? t('list.openDetections', { count: n(detections.length) })
                     : t('list.open', { count: incidents.length })}
                 </span>
@@ -287,7 +261,7 @@ export default function App() {
             )}
 
             {/* Right Sliding Detail Panel (Opens when an incident is selected) */}
-            {selectedIncident && scope === 'portugal' && (
+            {selectedIncident && (
               <IncidentDetailPanel
                 incident={selectedIncident}
                 onClose={() => setSelectedIncidentId(null)}
@@ -305,9 +279,10 @@ export default function App() {
         {activeTab === 'watch-zones' && (
           <WatchZonesView
             watchZones={watchZones}
-            onAddWatchZone={handleAddWatchZone}
-            onToggleWatchZone={handleToggleWatchZone}
-            onDeleteWatchZone={handleDeleteWatchZone}
+            incidents={allIncidents}
+            onAddWatchZone={addZone}
+            onToggleWatchZone={toggleZone}
+            onDeleteWatchZone={deleteZone}
             tileLayerType={tileLayerType}
             onChangeTileLayer={setTileLayerType}
           />

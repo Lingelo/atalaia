@@ -3,6 +3,7 @@ import React from 'react';
 import type { SatelliteDetection } from '../types';
 import { formatTimeAgo } from '../lib/time';
 import { useI18n } from '../i18n/context';
+import { useIsDesktop } from '../hooks/useIsDesktop';
 
 interface SatelliteListViewProps {
   detections: SatelliteDetection[];
@@ -30,11 +31,15 @@ export const SatelliteListView: React.FC<SatelliteListViewProps> = ({
   onClose,
 }) => {
   const { t, n, intlTag } = useI18n();
+  const isDesktop = useIsDesktop();
   const rows = detections.slice(0, MAX_ROWS);
 
   return (
+    // Sur desktop la colonne est toujours visible : la masquer aux lecteurs
+    // d'écran parce que la feuille MOBILE est fermée les priverait de toute la
+    // liste. Voir `useIsDesktop`.
     <aside
-      aria-hidden={!isOpen}
+      aria-hidden={!isDesktop && !isOpen}
       className={`absolute bottom-16 left-0 right-0 z-20 h-[72%] rounded-t-2xl overflow-hidden bg-[#16191C] border-t border-[#2D3034] flex flex-col transition-transform duration-300 ${
         isOpen ? 'translate-y-0' : 'translate-y-[calc(100%+4rem)] pointer-events-none'
       } md:static md:bottom-auto md:h-full md:w-[380px] lg:w-[400px] md:translate-y-0 md:pointer-events-auto md:rounded-none md:border-t-0 md:border-r md:shrink-0`}

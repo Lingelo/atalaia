@@ -1,7 +1,6 @@
 import React from 'react';
 
 import { useI18n } from '../i18n/context';
-import { LOCALES, LOCALE_LABELS, type Locale } from '../i18n/context';
 import type { ViewScope } from '../types';
 
 interface ScopeSwitcherProps {
@@ -14,25 +13,30 @@ interface ScopeSwitcherProps {
  *
  * POURQUOI le périmètre est explicite :
  *
- * La carte couvre le Portugal, l'Espagne et la France, mais les données
- * OPÉRATIONNELLES (effectifs, statuts, chronologie) n'existent qu'au Portugal —
- * vérifié : la Catalogne ne publie ni coordonnées ni effectifs et accuse six
- * jours de retard, la France ne diffuse que des statistiques annuelles.
+ * Laisser « 15 ocorrências ativas » surplomber une carte de plusieurs pays
+ * laisserait croire que ce chiffre les décrit tous. Le sélecteur rend le
+ * périmètre visible et choisi, au lieu d'être subi.
  *
- * Laisser « 15 ocorrências ativas » surplomber une carte de trois pays laisserait
- * croire que ce chiffre les décrit tous. Le sélecteur rend le périmètre visible
- * et choisi, au lieu d'être subi.
+ * Trois périmètres opérationnels et un satellite. La séparation ne vient plus
+ * d'une absence de données espagnoles — Andalousie, Catalogne et
+ * Castille-et-León en publient — mais de la différence de NATURE entre un
+ * sinistre confirmé au sol et une anomalie thermique vue de l'orbite.
+ *
+ * ⚠️ Le mode Espagne ne couvre que trois communautés autonomes : il n'existe pas
+ * de flux national. L'infobulle le dit, et le bandeau des sources le détaille.
  */
 export const ScopeSwitcher: React.FC<ScopeSwitcherProps> = ({ scope, onChangeScope }) => {
-  const { t, locale, setLocale } = useI18n();
+  const { t } = useI18n();
 
   const options: Array<{ value: ViewScope; label: string; hint: string }> = [
+    { value: 'iberia', label: t('scope.iberia'), hint: t('scope.iberia.hint') },
     { value: 'portugal', label: t('scope.portugal'), hint: t('scope.portugal.hint') },
-    { value: 'europe', label: t('scope.europe'), hint: t('scope.europe.hint') },
+    { value: 'spain', label: t('scope.spain'), hint: t('scope.spain.hint') },
+    { value: 'world', label: t('scope.world'), hint: t('scope.world.hint') },
   ];
 
   return (
-    <div className="flex items-center gap-2 shrink-0">
+    <div className="flex items-center shrink-0">
       <div
         role="group"
         aria-label={t('scope.label')}
@@ -59,21 +63,6 @@ export const ScopeSwitcher: React.FC<ScopeSwitcherProps> = ({ scope, onChangeSco
         })}
       </div>
 
-      <label className="sr-only" htmlFor="locale-select">
-        {t('lang.label')}
-      </label>
-      <select
-        id="locale-select"
-        value={locale}
-        onChange={(event) => setLocale(event.target.value as Locale)}
-        className="bg-[#16191C] border border-[#333536] text-[#e2e2e3] text-[12px] rounded px-2 py-1.5 focus:outline-none focus:border-[#ffb3ad]"
-      >
-        {LOCALES.map((code) => (
-          <option key={code} value={code}>
-            {LOCALE_LABELS[code]}
-          </option>
-        ))}
-      </select>
     </div>
   );
 };

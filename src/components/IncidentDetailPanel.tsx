@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { Incident } from '../types';
 import { formatDateTime } from '../lib/time';
-import { resolveStatus } from '../lib/status';
+import { resolvePhase } from '../lib/status';
 import { useI18n } from '../i18n/context';
 import type { TranslationKey } from '../i18n/pt';
 
@@ -37,6 +37,38 @@ interface IncidentDetailPanelProps {
   onToggleFollow?: (incidentId: string) => void;
 }
 
+/**
+ * Une grande tuile de moyens engagés, ou « — » si le service ne publie rien.
+ *
+ * Voir `Metric` dans IncidentListView pour le raisonnement : afficher « 0 »
+ * là où la donnée est absente ferait passer une lacune de publication pour une
+ * absence de secours.
+ */
+const BigMetric: React.FC<{
+  value: number | null;
+  label: string;
+  partial?: boolean;
+  className?: string;
+}> = ({ value, label, partial = false, className = '' }) => (
+  <div className={`flex flex-col p-3 min-w-0 ${className}`}>
+    <span className="font-['Inter'] text-[24px] md:text-[32px] font-bold text-[#e2e2e3] tabular-nums leading-none">
+      {value === null ? (
+        <span className="text-[#5a5d5f]">—</span>
+      ) : (
+        <>
+          {partial && value > 0 && (
+            <span className="text-[#e5bdb9] text-[18px] md:text-[22px] mr-0.5">≥</span>
+          )}
+          {value}
+        </>
+      )}
+    </span>
+    <span className="font-['Inter'] text-[10px] md:text-[11px] font-semibold text-[#e5bdb9] uppercase tracking-wide leading-tight break-words mt-2">
+      {label}
+    </span>
+  </div>
+);
+
 export const IncidentDetailPanel: React.FC<IncidentDetailPanelProps> = ({
   incident,
   onClose,
@@ -61,11 +93,8 @@ export const IncidentDetailPanel: React.FC<IncidentDetailPanelProps> = ({
     return nature;
   };
 
-  const meta = resolveStatus(incident.statusCode, incident.status);
-  const statusLabel =
-    meta.code >= 1 && meta.code <= 10
-      ? t(`status.${meta.code}` as TranslationKey)
-      : t('status.unknown', { code: meta.code });
+  const meta = resolvePhase(incident.phase);
+  const statusLabel = t(`phase.${incident.phase}` as TranslationKey);
 
   // Couleur de statut : registre unique (src/lib/status.ts). Auparavant ce
   // composant colorait « Em Resolução » en cyan alors que la carte et la liste le
@@ -77,7 +106,7 @@ export const IncidentDetailPanel: React.FC<IncidentDetailPanelProps> = ({
       title: incident.title,
       location: incident.locationName,
       status: statusLabel,
-      personnel: incident.operacionais,
+      personnel: incident.personnel === null ? '—' : incident.personnel,
     });
     if (navigator.share) {
       navigator.share({ title: incident.title, text: text, url: window.location.href }).catch(() => {});
@@ -141,31 +170,51 @@ export const IncidentDetailPanel: React.FC<IncidentDetailPanelProps> = ({
       <div className="flex-1 overflow-y-auto p-4 flex flex-col gap-6">
         {/* Stat Trio */}
         <section className="grid grid-cols-3 gap-0 border border-[#333536] rounded bg-[#121415]/60">
-          <div className="flex flex-col p-3 border-r border-[#333536] min-w-0">
-            <span className="font-['Inter'] text-[24px] md:text-[32px] font-bold text-[#e2e2e3] tabular-nums leading-none">
-              {incident.operacionais}
-            </span>
-            <span className="font-['Inter'] text-[10px] md:text-[11px] font-semibold text-[#e5bdb9] uppercase tracking-wide leading-tight break-words mt-2">
-              {t('detail.personnel')}
-            </span>
-          </div>
-          <div className="flex flex-col p-3 border-r border-[#333536] min-w-0">
-            <span className="font-['Inter'] text-[24px] md:text-[32px] font-bold text-[#e2e2e3] tabular-nums leading-none">
-              {incident.veiculos}
-            </span>
-            <span className="font-['Inter'] text-[10px] md:text-[11px] font-semibold text-[#e5bdb9] uppercase tracking-wide leading-tight break-words mt-2">
-              {t('detail.vehicles')}
-            </span>
-          </div>
-          <div className="flex flex-col p-3 min-w-0">
-            <span className="font-['Inter'] text-[24px] md:text-[32px] font-bold text-[#e2e2e3] tabular-nums leading-none">
-              {incident.meiosAereos}
-            </span>
-            <span className="font-['Inter'] text-[10px] md:text-[11px] font-semibold text-[#e5bdb9] uppercase tracking-wide leading-tight break-words mt-2">
-              {t('detail.aircraft')}
-            </span>
-          </div>
+          <BigMetric
+            value={incident.personnel}
+            label={t('detail.personnel')}
+            partial={incident.personnelIsPartial}
+            className="border-r border-[#333536]"
+          />
+          <BigMetric
+            value={incident.vehicles}
+            label={t('detail.vehicles')}
+            className="border-r border-[#333536]"
+          />
+          <BigMetric value={incident.aircraft} label={t('detail.aircraft')} />
         </section>
+
+        {/* Effectif partiel : la note explique le « ≥ » plutôt que de le laisser
+            deviner. Sans elle, le symbole passerait pour une coquille. */}
+        {incident.personnelIsPartial && incident.personnel !== null && (
+          <p className="font-['Inter'] text-[12px] leading-snug text-[#e5bdb9]/80 -mt-4 italic">
+            {t('detail.partialPersonnel')}
+          </p>
+        )}
+
+        {/* Détail des moyens tel que le service le publie.
+            Les libellés restent dans leur langue d'origine : « BRICA » et
+            « ELIF » sont des noms de dispositifs, pas du vocabulaire à traduire.
+            Ce bloc est ce qui rend le « ≥ » ci-dessus vérifiable — on voit les
+            équipes qui ne sont pas comptées en personnes. */}
+        {incident.resources.length > 0 && (
+          <section>
+            <h2 className="font-['Inter'] text-[12px] font-semibold text-[#e5bdb9] uppercase tracking-wider mb-3">
+              {t('detail.resources')}
+            </h2>
+            <ul className="flex flex-wrap gap-1.5">
+              {incident.resources.map((entry) => (
+                <li
+                  key={entry.label}
+                  className="px-2 py-1 rounded border border-[#333536] bg-[#121415]/60 text-[12px] text-[#e2e2e3]"
+                >
+                  <span className="font-semibold tabular-nums">{entry.count}</span>{' '}
+                  <span className="text-[#e5bdb9]">{entry.label}</span>
+                </li>
+              ))}
+            </ul>
+          </section>
+        )}
 
         {/* Condições no local.
             L'humidité et le vent gouvernent la propagation : ils passent en gros,

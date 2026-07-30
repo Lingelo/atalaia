@@ -1,10 +1,16 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { useI18n } from '../i18n/context';
-import { WatchZone, MapTileLayer } from '../types';
+import { Incident, WatchZone, MapTileLayer } from '../types';
+import { distanceKm } from '../lib/geo';
+import { resolvePhase } from '../lib/status';
+import { formatTimeAgo } from '../lib/time';
 import { InteractiveMap } from './InteractiveMap';
+import type { TranslationKey } from '../i18n/pt';
 
 interface WatchZonesViewProps {
   watchZones: WatchZone[];
+  /** Incidents réels, tous périmètres confondus. Sert l'aperçu et les distances. */
+  incidents: Incident[];
   onAddWatchZone: (zone: Omit<WatchZone, 'id'>) => void;
   onToggleWatchZone: (id: string) => void;
   onDeleteWatchZone: (id: string) => void;
@@ -14,13 +20,14 @@ interface WatchZonesViewProps {
 
 export const WatchZonesView: React.FC<WatchZonesViewProps> = ({
   watchZones,
+  incidents,
   onAddWatchZone,
   onToggleWatchZone,
   onDeleteWatchZone,
   tileLayerType,
   onChangeTileLayer,
 }) => {
-  const { t } = useI18n();
+  const { t, n, intlTag } = useI18n();
   const [notificationPermission, setNotificationPermission] = useState<string>(
     typeof window !== 'undefined' && 'Notification' in window ? Notification.permission : 'default'
   );
@@ -49,6 +56,30 @@ export const WatchZonesView: React.FC<WatchZonesViewProps> = ({
   const handlePickerPosChange = (lat: number, lng: number) => {
     setPickerPos({ lat, lng });
   };
+
+  /**
+   * Sinistre en cours le plus proche du point choisi.
+   *
+   * Remplace l'aperçu de notification inventé (« Nouveau sinistre à 6 km — En
+   * cours, 94 opérationnels »), qui affichait des chiffres constants quel que
+   * soit l'endroit désigné sur la carte. L'aperçu montre désormais un incident
+   * réel, ce qui en fait aussi un outil de décision : on voit immédiatement s'il
+   * se passe quelque chose autour du lieu qu'on s'apprête à surveiller.
+   */
+  const nearest = useMemo(() => {
+    let best: { incident: Incident; distance: number } | null = null;
+
+    for (const incident of incidents) {
+      if (!resolvePhase(incident.phase).ongoing) continue;
+      const distance = distanceKm(pickerPos.lat, pickerPos.lng, incident.lat, incident.lng);
+      if (!best || distance < best.distance) best = { incident, distance };
+    }
+
+    return best;
+  }, [incidents, pickerPos]);
+
+  /** Le sinistre le plus proche tomberait-il dans la zone en cours de création ? */
+  const nearestIsInside = nearest !== null && nearest.distance <= radiusKm;
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -79,13 +110,6 @@ export const WatchZonesView: React.FC<WatchZonesViewProps> = ({
       {/* LEFT COLUMN: ALERTS LIST */}
       <section className="w-full md:w-[420px] lg:w-[460px] h-full flex flex-col border-r border-[#333536] bg-[#121415] flex-shrink-0">
         <div className="p-4 border-b border-[#333536] flex flex-col gap-3">
-      {/* Ces vues affichent des données inventées. L'écrire à l'écran, et pas
-          seulement dans le code, évite qu'on les prenne pour des données réelles. */}
-      <div className="flex items-start gap-2 rounded border border-[#f0a500]/40 bg-[#f0a500]/10 px-3 py-2.5">
-        <span className="material-symbols-outlined text-[18px] text-[#f0a500] shrink-0">warning</span>
-        <p className="font-['Inter'] text-[12px] leading-snug text-[#f0d9a0]">{t('watch.mockWarning')}</p>
-      </div>
-
           <h2 className="font-['Inter'] text-[24px] font-semibold text-[#e2e2e3] mb-3">{t('watch.title')}</h2>
 
           {/* Browser Notification Banner */}
@@ -135,6 +159,25 @@ export const WatchZonesView: React.FC<WatchZonesViewProps> = ({
                   {zone.radiusKm} km ·{' '}
                   {zone.condition === 'all' ? t('watch.conditionAll') : t('watch.conditionMajor')}
                 </p>
+                {/* Décompte RÉEL des sinistres en cours dans la zone : c'est ce
+                    qui transforme une liste de réglages en information utile. */}
+                <p className="font-['Inter'] text-[12px] mt-0.5 truncate">
+                  {(() => {
+                    const inside = incidents.filter(
+                      (incident) =>
+                        resolvePhase(incident.phase).ongoing &&
+                        distanceKm(zone.lat, zone.lng, incident.lat, incident.lng) <= zone.radiusKm
+                    ).length;
+
+                    return inside > 0 ? (
+                      <span className="text-[#ffb3ad] font-semibold">
+                        {t('watch.insideCount', { count: n(inside) })}
+                      </span>
+                    ) : (
+                      <span className="text-[#e5bdb9]/60">{t('watch.insideNone')}</span>
+                    );
+                  })()}
+                </p>
               </div>
 
               {/* Action Toggle Switch */}
@@ -158,7 +201,7 @@ export const WatchZonesView: React.FC<WatchZonesViewProps> = ({
                   type="button"
                   onClick={() => onDeleteWatchZone(zone.id)}
                   className="p-1 text-[#e5bdb9] hover:text-[#ef4444] transition-colors"
-                  title="Remover Área"
+                  title={t('watch.delete')}
                 >
                   <span className="material-symbols-outlined text-[18px]">delete</span>
                 </button>
@@ -167,11 +210,16 @@ export const WatchZonesView: React.FC<WatchZonesViewProps> = ({
           ))}
 
           {watchZones.length === 0 && (
-            <div className="p-8 text-center text-[#e5bdb9] text-sm">
-              Nenhuma área de alerta configurada. Use o formulário ao lado para criar.
-            </div>
+            <div className="p-8 text-center text-[#e5bdb9] text-sm">{t('watch.empty')}</div>
           )}
         </div>
+
+        {/* Où vivent ces zones. La promesse tenue est bornée : elles sont
+            conservées sur CET appareil, et nulle part ailleurs. Le dire évite
+            qu'on les croie synchronisées, et qu'on les perde sans comprendre. */}
+        <p className="px-4 py-3 border-t border-[#333536] font-['Inter'] text-[11px] leading-snug text-[#e5bdb9]/70">
+          {t('watch.storageNote')}
+        </p>
       </section>
 
       {/* RIGHT COLUMN: NEW AREA FORM & INTERACTIVE MAP PICKER */}
@@ -190,26 +238,54 @@ export const WatchZonesView: React.FC<WatchZonesViewProps> = ({
             className="w-full h-full"
           />
 
-          {/* Floating Simulated Alert Preview Overlay */}
+          {/* Sinistre RÉEL le plus proche du point choisi.
+              Ce n'était auparavant qu'une maquette de notification, avec une
+              distance calculée sur le rayon et un « 94 opérationnels » constant :
+              elle ne décrivait rien. */}
           <div className="absolute bottom-3 left-1/2 -translate-x-1/2 w-[90%] max-w-sm bg-[#1e2021]/95 border border-[#333536] rounded p-3 flex gap-3 z-[400] shadow-2xl backdrop-blur-md pointer-events-none">
-            <div className="w-10 h-10 rounded bg-[#d8262c] flex items-center justify-center flex-shrink-0">
-              <span className="material-symbols-outlined text-[#fff2f1] material-symbols-filled text-[20px]">
-                local_fire_department
+            <div
+              className="w-10 h-10 rounded flex items-center justify-center flex-shrink-0"
+              style={{
+                backgroundColor: nearest
+                  ? resolvePhase(nearest.incident.phase).color
+                  : '#333536',
+              }}
+            >
+              <span className="material-symbols-outlined text-[#fff2f1] text-[20px]">
+                {nearest ? 'local_fire_department' : 'check_circle'}
               </span>
             </div>
-            <div>
-              <div className="flex justify-between items-baseline mb-0.5">
-                <span className="font-['Inter'] text-[11px] font-bold text-[#e2e2e3] uppercase tracking-wider">
-                  {t('app.name')}
+            <div className="min-w-0">
+              <div className="flex justify-between items-baseline gap-2 mb-0.5">
+                <span className="font-['Inter'] text-[11px] font-bold text-[#e2e2e3] uppercase tracking-wider truncate">
+                  {nearest ? nearest.incident.title : t('app.name')}
                 </span>
-                <span className="font-['Inter'] text-[11px] text-[#e5bdb9]">{t('time.justNow')}</span>
+                {nearest && (
+                  <span className="font-['Inter'] text-[11px] text-[#e5bdb9] shrink-0">
+                    {formatTimeAgo(nearest.incident.startedAt, intlTag, t('time.justNow'))}
+                  </span>
+                )}
               </div>
               <p className="font-['Inter'] text-[13px] text-[#e2e2e3] leading-tight">
-                {t('watch.sampleNotif', {
-                  km: (radiusKm * 0.4).toFixed(1),
-                  place: name || t('watch.yourLocation'),
-                })}
+                {nearest
+                  ? t('watch.nearest', {
+                      km: n(nearest.distance, { maximumFractionDigits: 1 }),
+                      status: t(`phase.${nearest.incident.phase}` as TranslationKey),
+                      location: nearest.incident.locationName,
+                    })
+                  : t('watch.noneNearby')}
               </p>
+              {/* Dit si le rayon choisi couvrirait effectivement ce sinistre :
+                  c'est la question que se pose l'utilisateur en réglant le curseur. */}
+              {nearest && (
+                <p
+                  className={`font-['Inter'] text-[11px] mt-1 font-semibold ${
+                    nearestIsInside ? 'text-[#ffb3ad]' : 'text-[#e5bdb9]'
+                  }`}
+                >
+                  {nearestIsInside ? t('watch.wouldAlert') : t('watch.wouldNotAlert')}
+                </p>
+              )}
             </div>
           </div>
         </div>

@@ -12,6 +12,7 @@
 
 import type { FogosActiveResponse, FogosIncident } from './fogosTypes';
 import type { BurnedBreakdown, Incident } from '../types';
+import { phaseFromAnepcCode } from '../lib/status.ts';
 
 /**
  * Origine du proxy en production, injectée au build.
@@ -89,21 +90,35 @@ export function toIncident(raw: FogosIncident): Incident {
   const kml = raw.kmlVost ?? raw.kml;
 
   return {
-    id: raw.id,
+    id: `anepc-${raw.id}`,
+    source: 'anepc',
+
     title: raw.freguesia || raw.concelho,
     locationName: [raw.district, raw.concelho].filter(Boolean).join(', '),
     district: raw.district,
     municipality: raw.concelho,
 
     status: raw.status,
+    phase: phaseFromAnepcCode(raw.statusCode),
     statusCode: raw.statusCode,
 
     // L'API donne des SECONDES epoch, JavaScript raisonne en millisecondes.
     startedAt: raw.dateTime.sec * 1000,
 
-    operacionais: raw.man ?? 0,
-    veiculos: raw.terrain ?? 0,
-    meiosAereos: raw.aerial ?? 0,
+    // L'ANEPC publie de vrais EFFECTIFS (des personnes), pas des groupes : ce
+    // sont les seuls chiffres directement comparables d'une source à l'autre.
+    // `?? null` et non `?? 0` : voir la note sur `personnel` dans types.ts.
+    personnel: raw.man ?? null,
+    vehicles: raw.terrain ?? null,
+    aircraft: raw.aerial ?? null,
+    // Effectif TOTAL, et non un poste nommé : c'est la seule des quatre sources
+    // à en publier un. Voir `personnelIsPartial` dans types.ts.
+    personnelIsPartial: false,
+    // Les trois totaux ci-dessus épuisent ce que publie l'ANEPC : pas de détail
+    // par catégorie d'engin, contrairement aux services espagnols.
+    resources: [],
+
+    severityLevel: null,
 
     lat: raw.lat,
     lng: raw.lng,

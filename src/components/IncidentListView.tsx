@@ -1,16 +1,15 @@
 import React, { useState } from 'react';
-import { Incident, ViewTab } from '../types';
+import { Incident, SOURCES } from '../types';
 import { formatDateTime, formatTimeAgo } from '../lib/time';
-import { resolveStatus } from '../lib/status';
+import { resolvePhase } from '../lib/status';
 import { useI18n } from '../i18n/context';
+import { useIsDesktop } from '../hooks/useIsDesktop';
 import type { TranslationKey } from '../i18n/pt';
 
 interface IncidentListViewProps {
   incidents: Incident[];
   selectedIncidentId?: string | null;
   onSelectIncident: (incident: Incident) => void;
-  activeTab: ViewTab;
-  onChangeTab: (tab: ViewTab) => void;
   searchTerm: string;
   onSearchChange: (term: string) => void;
   statusFilter: string;
@@ -20,18 +19,54 @@ interface IncidentListViewProps {
   onClose: () => void;
   totalStats: {
     activeCount: number;
-    operacionais: number;
-    veiculos: number;
-    meiosAereos: number;
+    /** `null` quand aucun service du périmètre ne publie la valeur. */
+    personnel: number | null;
+    vehicles: number | null;
+    aircraft: number | null;
+    personnelIsPartial: boolean;
   };
 }
+
+/**
+ * Un chiffre de moyens engagés, ou l'aveu qu'on ne l'a pas.
+ *
+ * ⚠️ C'est ici que se joue la lisibilité du mode Espagne. Les Bombers de la
+ * Generalitat ne publient aucun effectif : afficher « 0 » sur chaque ligne
+ * catalane donnerait à voir des incendies que personne ne combat. Un tiret gris
+ * dit la seule chose vraie — la donnée n'est pas publiée.
+ *
+ * Le « ≥ » marque un décompte partiel : les services espagnols dénombrent des
+ * techniciens et des agents, mais publient les brigades en ÉQUIPES dont
+ * l'effectif reste inconnu. Le nombre est donc un plancher, pas un total.
+ */
+const Metric: React.FC<{
+  icon: string;
+  value: number | null;
+  title: string;
+  partial?: boolean;
+}> = ({ icon, value, title, partial = false }) => {
+  const dimmed = value === null || value === 0;
+
+  return (
+    <div className="flex items-center gap-1" title={title}>
+      <span className={`material-symbols-outlined text-[16px] ${dimmed ? 'opacity-40' : ''}`}>
+        {icon}
+      </span>
+      {value === null ? (
+        <span className="opacity-40">—</span>
+      ) : (
+        <span className={dimmed ? 'opacity-40' : 'text-[#e2e2e3] font-semibold'}>
+          {partial && value > 0 ? `≥${value}` : value}
+        </span>
+      )}
+    </div>
+  );
+};
 
 export const IncidentListView: React.FC<IncidentListViewProps> = ({
   incidents,
   selectedIncidentId,
   onSelectIncident,
-  activeTab,
-  onChangeTab,
   searchTerm,
   onSearchChange,
   statusFilter,
@@ -41,23 +76,25 @@ export const IncidentListView: React.FC<IncidentListViewProps> = ({
   totalStats,
 }) => {
   const { t, n, intlTag } = useI18n();
+  const isDesktop = useIsDesktop();
   const [showFilterDropdown, setShowFilterDropdown] = useState(false);
   const [activeChipFilter, setActiveChipFilter] = useState<string>('all');
 
-  /** Libellé traduit d'un statut : indexé sur le code, jamais sur le texte source. */
-  const statusLabel = (incident: Incident) => {
-    const meta = resolveStatus(incident.statusCode, incident.status);
-    const key = `status.${meta.code}` as TranslationKey;
-    return meta.code >= 1 && meta.code <= 10
-      ? t(key)
-      : t('status.unknown', { code: meta.code });
-  };
+  /**
+   * Libellé traduit d'un statut, indexé sur la PHASE canonique.
+   *
+   * Quatre services publient leurs états en quatre langues ; traduire la phase
+   * plutôt que le texte source est ce qui permet à un utilisateur francophone de
+   * lire « Maîtrisé » sur un feu catalan comme sur un feu portugais. Le libellé
+   * d'origine reste affiché en second, parce que c'est lui qui fait foi.
+   */
+  const statusLabel = (incident: Incident) => t(`phase.${incident.phase}` as TranslationKey);
 
   // Couleurs de statut : registre unique (src/lib/status.ts), appliqué en style
   // inline. Tailwind ne peut pas générer `bg-[${color}]` à l'exécution — son
   // scanner lit le source à la compilation, pas les valeurs calculées.
   const getStatusBadgeStyle = (incident: Incident): React.CSSProperties => {
-    const { color } = resolveStatus(incident.statusCode, incident.status);
+    const { color } = resolvePhase(incident.phase);
     return {
       borderColor: color,
       // 26/255 ≈ 15 % d'opacité, comme la maquette.
@@ -75,15 +112,18 @@ export const IncidentListView: React.FC<IncidentListViewProps> = ({
       inc.district.toLowerCase().includes(searchTerm.toLowerCase()) ||
       inc.municipality.toLowerCase().includes(searchTerm.toLowerCase());
 
-    const matchesStatus = statusFilter === 'all' || String(inc.statusCode) === statusFilter;
+    const matchesStatus = statusFilter === 'all' || inc.phase === statusFilter;
 
     let matchesChip = true;
     if (activeChipFilter === '> 100 Ops') {
-      matchesChip = inc.operacionais > 100;
+      // `?? 0` seulement ICI : un service qui ne publie pas ses effectifs ne
+      // peut pas satisfaire un filtre « plus de 100 opérationnels ». C'est un
+      // filtre, pas un total — il restreint, il n'affirme rien.
+      matchesChip = (inc.personnel ?? 0) > 100;
     } else if (activeChipFilter === 'Aerial Assets') {
-      matchesChip = inc.meiosAereos > 0;
+      matchesChip = (inc.aircraft ?? 0) > 0;
     } else if (activeChipFilter === 'Resolution') {
-      matchesChip = resolveStatus(inc.statusCode, inc.status).ongoing;
+      matchesChip = resolvePhase(inc.phase).ongoing;
     }
 
     return matchesSearch && matchesStatus && matchesChip;
@@ -92,29 +132,32 @@ export const IncidentListView: React.FC<IncidentListViewProps> = ({
   // Tri par gravité décroissante, puis par ancienneté. Un tri purement
   // chronologique enterrerait un feu majeur sous des départs mineurs plus récents.
   const sortedIncidents = [...filteredIncidents].sort((a, b) => {
-    const severityDelta =
-      resolveStatus(b.statusCode, b.status).severity - resolveStatus(a.statusCode, a.status).severity;
+    const severityDelta = resolvePhase(b.phase).severity - resolvePhase(a.phase).severity;
     if (severityDelta !== 0) return severityDelta;
 
-    const resourcesDelta =
-      b.operacionais + b.veiculos * 3 + b.meiosAereos * 20 -
-      (a.operacionais + a.veiculos * 3 + a.meiosAereos * 20);
+    // Pondération des moyens, `null` comptant pour 0 dans le seul but de
+    // classer. Un incident aux moyens non publiés se retrouve donc plus bas à
+    // gravité égale — c'est un défaut assumé du tri, pas un chiffre affiché.
+    const weight = (inc: Incident) =>
+      (inc.personnel ?? 0) + (inc.vehicles ?? 0) * 3 + (inc.aircraft ?? 0) * 20;
+    const resourcesDelta = weight(b) - weight(a);
     if (resourcesDelta !== 0) return resourcesDelta;
 
     return b.startedAt - a.startedAt;
   });
 
-  // Statuts réellement présents, pour que le filtre expose aussi ceux qui
-  // n'étaient pas prévus par la maquette (« Despacho de 1º Alerta », etc.).
-  const availableStatuses = Array.from(
-    new Map(
-      incidents.map((inc) => [inc.statusCode, resolveStatus(inc.statusCode, inc.status)])
-    ).values()
-  ).sort((a, b) => b.severity - a.severity);
+  // Phases réellement présentes, pour que le filtre n'expose que des états
+  // qu'on peut effectivement sélectionner.
+  const availablePhases = Array.from(new Set(incidents.map((inc) => inc.phase))).sort(
+    (a, b) => resolvePhase(b).severity - resolvePhase(a).severity
+  );
 
   return (
+    // Sur desktop la colonne est toujours visible : la masquer aux lecteurs
+    // d'écran parce que la feuille MOBILE est fermée les priverait de toute la
+    // liste. Voir `useIsDesktop`.
     <aside
-      aria-hidden={!isOpen}
+      aria-hidden={!isDesktop && !isOpen}
       className={`absolute bottom-16 left-0 right-0 z-20 h-[72%] rounded-t-2xl overflow-hidden bg-[#16191C] border-t border-[#2D3034] flex flex-col transition-transform duration-300 ${
         isOpen ? 'translate-y-0' : 'translate-y-[calc(100%+4rem)] pointer-events-none'
       } md:static md:bottom-auto md:h-full md:w-[380px] lg:w-[400px] md:translate-y-0 md:pointer-events-auto md:rounded-none md:border-t-0 md:border-r md:shrink-0`}
@@ -125,7 +168,10 @@ export const IncidentListView: React.FC<IncidentListViewProps> = ({
         <span className="font-['Inter'] text-[13px] text-[#e5bdb9] tabular-nums">
           {t('list.summary', {
             active: totalStats.activeCount,
-            personnel: n(totalStats.operacionais),
+            personnel:
+              totalStats.personnel === null
+                ? '—'
+                : `${totalStats.personnelIsPartial ? '≥' : ''}${n(totalStats.personnel)}`,
           })}
         </span>
         <button
@@ -137,72 +183,6 @@ export const IncidentListView: React.FC<IncidentListViewProps> = ({
           <span className="font-['Inter'] text-[13px] font-semibold">{t('list.close')}</span>
         </button>
       </div>
-
-      {/* Top Header Bar inside Sidebar */}
-      <header className="hidden md:flex h-16 justify-between items-center px-4 border-b border-[#2D3034] bg-[#1e2021]">
-        <div className="flex items-center gap-2">
-          <span className="material-symbols-outlined text-[#ffb3ad] text-2xl">menu</span>
-          <h1 className="font-['Inter'] text-[20px] font-bold tracking-tight text-[#e2e2e3]">
-            {t('app.name')}
-          </h1>
-        </div>
-
-        <div className="flex items-center gap-1">
-          <button
-            type="button"
-            onClick={() => setShowFilterDropdown(!showFilterDropdown)}
-            className="w-8 h-8 flex items-center justify-center rounded hover:bg-[#333536] transition-colors text-[#e5bdb9]"
-            title={t('list.filters')}
-          >
-            <span className="material-symbols-outlined text-[20px]">search</span>
-          </button>
-          <button
-            type="button"
-            onClick={() => onChangeTab('watch-zones')}
-            className="w-8 h-8 flex items-center justify-center rounded hover:bg-[#333536] transition-colors text-[#e5bdb9]"
-            title="Alertas & Zonas"
-          >
-            <span className="material-symbols-outlined text-[20px]">notifications</span>
-          </button>
-        </div>
-      </header>
-
-      {/* Navigation Tabs (Segmented Control style) */}
-      <nav className="flex border-b border-[#2D3034] bg-[#16191C] px-2 pt-2">
-        <button
-          type="button"
-          onClick={() => onChangeTab('dashboard')}
-          className={`flex-1 pb-2 border-b-2 font-['Inter'] text-[12px] font-bold uppercase tracking-wider transition-colors ${
-            activeTab === 'dashboard'
-              ? 'border-[#ffb3ad] text-[#ffb3ad]'
-              : 'border-transparent text-[#e5bdb9] hover:text-[#e2e2e3]'
-          }`}
-        >
-          Dashboard
-        </button>
-        <button
-          type="button"
-          onClick={() => onChangeTab('analytics')}
-          className={`flex-1 pb-2 border-b-2 font-['Inter'] text-[12px] font-bold uppercase tracking-wider transition-colors ${
-            activeTab === 'analytics'
-              ? 'border-[#ffb3ad] text-[#ffb3ad]'
-              : 'border-transparent text-[#e5bdb9] hover:text-[#e2e2e3]'
-          }`}
-        >
-          Analytics
-        </button>
-        <button
-          type="button"
-          onClick={() => onChangeTab('watch-zones')}
-          className={`flex-1 pb-2 border-b-2 font-['Inter'] text-[12px] font-bold uppercase tracking-wider transition-colors ${
-            activeTab === 'watch-zones'
-              ? 'border-[#ffb3ad] text-[#ffb3ad]'
-              : 'border-transparent text-[#e5bdb9] hover:text-[#e2e2e3]'
-          }`}
-        >
-          Watch Zones
-        </button>
-      </nav>
 
       {/* Search Input and Filters Toggle Bar */}
       <div className="p-3 border-b border-[#2D3034] bg-[#16191C] flex flex-col gap-2">
@@ -230,7 +210,7 @@ export const IncidentListView: React.FC<IncidentListViewProps> = ({
             }`}
           >
             <span className="material-symbols-outlined text-[16px]">tune</span>
-            Filtros
+            {t('list.filters')}
           </button>
         </div>
 
@@ -252,12 +232,9 @@ export const IncidentListView: React.FC<IncidentListViewProps> = ({
             <div className="grid grid-cols-2 gap-1.5">
               {[
                 { code: 'all', label: t('list.all') },
-                ...availableStatuses.map((meta) => ({
-                  code: String(meta.code),
-                  label:
-                    meta.code >= 1 && meta.code <= 10
-                      ? t(`status.${meta.code}` as TranslationKey)
-                      : t('status.unknown', { code: meta.code }),
+                ...availablePhases.map((phase) => ({
+                  code: phase,
+                  label: t(`phase.${phase}` as TranslationKey),
                 })),
               ].map(({ code: st, label }) => (
                 <button
@@ -307,7 +284,7 @@ export const IncidentListView: React.FC<IncidentListViewProps> = ({
       <div className="flex-1 overflow-y-auto divide-y divide-[#2D3034]">
         {sortedIncidents.map((inc) => {
           const isSelected = inc.id === selectedIncidentId;
-          const statusColor = resolveStatus(inc.statusCode, inc.status).color;
+          const statusColor = resolvePhase(inc.phase).color;
           const badgeStyle = getStatusBadgeStyle(inc);
 
           return (
@@ -342,40 +319,35 @@ export const IncidentListView: React.FC<IncidentListViewProps> = ({
                 </span>
               </div>
 
-              <div className="flex items-center gap-2 mb-2.5">
+              <div className="flex items-center gap-2 mb-2.5 flex-wrap">
                 <div
                   className="px-2 py-0.5 border rounded text-[10px] font-bold uppercase tracking-wider"
                   style={badgeStyle}
                 >
                   {statusLabel(inc)}
                 </div>
+                {/* Territoire de la source. En mode péninsule, la liste mêle
+                    quatre services : sans cette étiquette, rien ne dirait
+                    pourquoi une ligne andalouse n'affiche pas d'effectif. */}
+                <span className="px-2 py-0.5 rounded bg-[#282a2b] text-[10px] font-semibold text-[#e5bdb9] uppercase tracking-wider">
+                  {SOURCES[inc.source].territory}
+                </span>
+                {inc.severityLevel && (
+                  <span className="px-2 py-0.5 rounded bg-[#282a2b] text-[10px] font-semibold text-[#e5bdb9] uppercase tracking-wider">
+                    {t('detail.severityLevel', { level: inc.severityLevel })}
+                  </span>
+                )}
               </div>
 
               <div className="flex gap-4 text-[13px] tabular-nums text-[#e5bdb9]">
-                <div className="flex items-center gap-1" title="Operacionais no terreno">
-                  <span className="material-symbols-outlined text-[16px]">group</span>
-                  <span className="text-[#e2e2e3] font-semibold">{inc.operacionais}</span>
-                </div>
-                <div className="flex items-center gap-1" title="Veículos de combate">
-                  <span className="material-symbols-outlined text-[16px]">local_fire_department</span>
-                  <span className="text-[#e2e2e3] font-semibold">{inc.veiculos}</span>
-                </div>
-                <div className="flex items-center gap-1" title="Meios Aéreos">
-                  <span
-                    className={`material-symbols-outlined text-[16px] ${
-                      inc.meiosAereos === 0 ? 'opacity-40' : ''
-                    }`}
-                  >
-                    flight
-                  </span>
-                  <span
-                    className={
-                      inc.meiosAereos === 0 ? 'opacity-40' : 'text-[#e2e2e3] font-semibold'
-                    }
-                  >
-                    {inc.meiosAereos}
-                  </span>
-                </div>
+                <Metric
+                  icon="group"
+                  value={inc.personnel}
+                  partial={inc.personnelIsPartial}
+                  title={t('detail.personnel')}
+                />
+                <Metric icon="local_fire_department" value={inc.vehicles} title={t('detail.vehicles')} />
+                <Metric icon="flight" value={inc.aircraft} title={t('detail.aircraft')} />
               </div>
             </article>
           );
@@ -383,7 +355,7 @@ export const IncidentListView: React.FC<IncidentListViewProps> = ({
 
         {sortedIncidents.length === 0 && (
           <div className="p-8 text-center text-[#e5bdb9] text-sm">
-            Nenhuma ocorrência encontrada para os filtros selecionados.
+            {t('list.empty')}
           </div>
         )}
       </div>
