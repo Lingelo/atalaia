@@ -43,16 +43,46 @@ jobs:
       # s'applique pas. Les trois services espagnols, eux, accepteraient un
       # appel direct depuis le navigateur ; ils sont récupérés ici quand même,
       # pour que tout le jeu porte une seule et même date de production.
-      - name: Précalculer les données temps réel
-        run: npm run build:data
+      #
+      # ⚠️ LES DEUX JEUX SONT PRODUITS SÉPARÉMENT, et ce n'est pas cosmétique.
+      # Ils tenaient dans un seul `npm run build:data`, soit
+      # `build-firms && build-incidents` : le `&&` faisait qu'une panne réseau
+      # chez la NASA empêchait de récupérer les incidents, puis de publier le
+      # site. L'accessoire — une couche satellite optionnelle, éteinte par
+      # défaut — bloquait l'essentiel : les sinistres de la protection civile,
+      # qui sont la raison d'être de cette carte.
 
-      # NOTE — l'onglet Historique et son agrégation ont été retirés. Le workflow
-      # mettait en cache `history.json` à la journée, parce que le script
-      # parcourait l'archive portugaise page par page : api.fogos.pt, derrière
-      # Cloudflare, n'accepte qu'environ cinq requêtes par fenêtre de quinze
-      # secondes, ce qui rendait l'agrégation longue de plusieurs minutes et
-      # exposait l'adresse au bannissement. Tout cela disparaît avec l'onglet :
-      # la publication ne dépend plus que des données temps réel ci-dessus.
+      # Repli sur le dernier jeu satellite réussi. `public/data/` étant ignoré
+      # par git, un runner neuf n'en a AUCUN : sans ce cache, un échec FIRMS
+      # laisse la couche entièrement vide plutôt que légèrement datée. Les
+      # détections portent leur horodatage et la carte les grise en vieillissant,
+      # donc resservir un jeu de quelques heures se voit à l'écran.
+      - name: Restaurer les détections satellite
+        uses: actions/cache/restore@v4
+        with:
+          path: public/data/firms.json
+          key: firms-${{ github.run_id }}
+          restore-keys: firms-
+
+      # `continue-on-error` : une panne de la NASA dégrade la couche satellite,
+      # elle ne doit pas retenir la publication. L'interface sait déjà signaler
+      # une couche indisponible.
+      - name: Précalculer les détections satellite (NASA FIRMS)
+        id: firms
+        continue-on-error: true
+        run: npm run build:firms
+
+      - name: Conserver les détections satellite
+        if: steps.firms.outcome == 'success'
+        uses: actions/cache/save@v4
+        with:
+          path: public/data/firms.json
+          key: firms-${{ github.run_id }}
+
+      # Les incidents, eux, RESTENT bloquants : sans eux la carte n'a plus de
+      # sujet, et publier une page vide vaudrait moins que garder la précédente.
+      - name: Précalculer les incidents (protection civile)
+        run: npm run build:incidents
 
       - name: Construire le site
         run: npm run build

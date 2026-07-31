@@ -38,19 +38,52 @@ const USER_AGENT = 'atalaia/0.1 (+https://github.com/Lingelo/atalaia)';
 
 const OUTPUT = resolve(dirname(fileURLToPath(import.meta.url)), '../public/data/firms.json');
 
+/**
+ * Télécharge un CSV FIRMS, en réessayant sur échec réseau.
+ *
+ * POURQUOI ce filet : sur les runners GitHub, la connexion à
+ * firms.modaps.eosdis.nasa.gov échoue régulièrement par `ETIMEDOUT`, en moins
+ * d'une seconde — la connexion n'est même pas établie, ce n'est pas un serveur
+ * qui répond mal. C'est typiquement transitoire, et une seule tentative
+ * transformait cet aléa en déploiement perdu.
+ *
+ * Attente croissante entre les essais : si l'amont est réellement saturé,
+ * marteler n'arrangerait rien. Le `timeout` explicite évite par ailleurs qu'une
+ * connexion pendante retienne le build de longues minutes.
+ */
+async function fetchCsv(path: string, attempts = 4): Promise<string> {
+  let lastError: unknown;
+
+  for (let attempt = 1; attempt <= attempts; attempt += 1) {
+    try {
+      const response = await fetch(`${FIRMS_ORIGIN}${path}`, {
+        headers: { 'User-Agent': USER_AGENT },
+        signal: AbortSignal.timeout(120_000),
+      });
+      if (!response.ok) throw new Error(`FIRMS ${response.status} sur ${path}`);
+      return await response.text();
+    } catch (error: unknown) {
+      lastError = error;
+      if (attempt === attempts) break;
+
+      const backoff = 2 ** attempt * 1000;
+      console.warn(
+        `FIRMS ${path} : échec ${attempt}/${attempts} (${
+          error instanceof Error ? error.message : String(error)
+        }) — nouvelle tentative dans ${backoff / 1000} s`
+      );
+      await new Promise((resolve) => setTimeout(resolve, backoff));
+    }
+  }
+
+  throw lastError instanceof Error ? lastError : new Error(String(lastError));
+}
+
 async function main(): Promise<void> {
   // Les frontières et les détections sont récupérées en parallèle : elles ne
   // dépendent pas l'une de l'autre, et le CSV mondial est long à descendre.
   const [texts, countryIndex] = await Promise.all([
-    Promise.all(
-      VIIRS_SOURCES.map(async (path) => {
-        const response = await fetch(`${FIRMS_ORIGIN}${path}`, {
-          headers: { 'User-Agent': USER_AGENT },
-        });
-        if (!response.ok) throw new Error(`FIRMS ${response.status} sur ${path}`);
-        return response.text();
-      })
-    ),
+    Promise.all(VIIRS_SOURCES.map((path) => fetchCsv(path))),
     buildCountryIndex(),
   ]);
 
