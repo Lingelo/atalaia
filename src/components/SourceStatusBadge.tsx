@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
 
 import { SOURCES, type ViewScope } from '../types';
 import type { SourceReport } from '../api/spain/index';
@@ -29,10 +29,53 @@ interface SourceStatusBadgeProps {
 export const SourceStatusBadge: React.FC<SourceStatusBadgeProps> = ({ reports, scope }) => {
   const { t, n } = useI18n();
   const [isOpen, setIsOpen] = useState(false);
+  const buttonRef = useRef<HTMLButtonElement>(null);
+  const [anchor, setAnchor] = useState<{ top: number; right: number } | null>(null);
 
-  // Le périmètre mondial ne repose sur aucun de ces services : il n'a rien à
-  // qualifier ici, l'avertissement satellite est porté par sa propre liste.
-  if (scope === 'world' || reports.length === 0) return null;
+  /**
+   * Position du panneau, mesurée sur le bouton.
+   *
+   * ⚠️ POURQUOI ce calcul, là où un simple `absolute` suffirait normalement :
+   * la barre du haut porte `overflow-x-auto`, pour rester utilisable sur un
+   * écran étroit. Or CSS interdit de mélanger les axes — dès qu'un axe n'est
+   * plus `visible`, l'autre passe de `visible` à `auto`. La barre CLIPPE donc
+   * verticalement, et un panneau en `absolute` y disparaissait purement et
+   * simplement : on cliquait, et la carte restait à l'écran.
+   *
+   * Un élément `fixed` échappe au découpage de ses ancêtres. Il faut en revanche
+   * lui donner ses coordonnées, d'où la mesure.
+   */
+  useLayoutEffect(() => {
+    if (!isOpen) return;
+
+    const place = () => {
+      const rect = buttonRef.current?.getBoundingClientRect();
+      if (!rect) return;
+      setAnchor({ top: rect.bottom + 8, right: window.innerWidth - rect.right });
+    };
+
+    place();
+    window.addEventListener('resize', place);
+    return () => window.removeEventListener('resize', place);
+  }, [isOpen]);
+
+  // Fermeture au clic extérieur : sans elle, un panneau ouvert par curiosité
+  // reste posé sur la carte, qu'il masque en partie.
+  useEffect(() => {
+    if (!isOpen) return;
+
+    const onPointerDown = (event: PointerEvent) => {
+      const target = event.target as Node;
+      if (buttonRef.current?.contains(target)) return;
+      if ((target as Element)?.closest?.('[data-source-panel]')) return;
+      setIsOpen(false);
+    };
+
+    document.addEventListener('pointerdown', onPointerDown);
+    return () => document.removeEventListener('pointerdown', onPointerDown);
+  }, [isOpen]);
+
+  if (reports.length === 0) return null;
 
   const relevant = reports.filter((report) => {
     if (scope === 'iberia') return true;
@@ -48,6 +91,7 @@ export const SourceStatusBadge: React.FC<SourceStatusBadgeProps> = ({ reports, s
   return (
     <div className="relative">
       <button
+        ref={buttonRef}
         type="button"
         onClick={() => setIsOpen((open) => !open)}
         aria-expanded={isOpen}
@@ -69,8 +113,12 @@ export const SourceStatusBadge: React.FC<SourceStatusBadgeProps> = ({ reports, s
         </span>
       </button>
 
-      {isOpen && (
-        <div className="absolute right-0 top-full mt-2 w-[300px] rounded border border-[#2D3034] bg-[#16191C] shadow-2xl p-3 z-[500] text-left">
+      {isOpen && anchor && (
+        <div
+          data-source-panel
+          style={{ top: anchor.top, right: anchor.right }}
+          className="fixed w-[300px] max-w-[calc(100vw-2rem)] rounded border border-[#2D3034] bg-[#16191C] shadow-2xl p-3 z-[900] text-left"
+        >
           <h3 className="font-['Inter'] text-[12px] font-bold text-[#e2e2e3] uppercase tracking-wider mb-2">
             {t('sources.title')}
           </h3>

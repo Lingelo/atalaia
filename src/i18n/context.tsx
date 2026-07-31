@@ -1,18 +1,25 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 
 import { pt, type Dictionary, type TranslationKey } from './pt';
-import { fr } from './fr';
 import { es } from './es';
 import { en } from './en';
 
-export const LOCALES = ['pt', 'es', 'fr', 'en'] as const;
+export const LOCALES = ['pt', 'es', 'en'] as const;
 export type Locale = (typeof LOCALES)[number];
 
-/** Étiquettes dans leur propre langue : un francophone cherche « Français », pas « Francês ». */
+/**
+ * Étiquettes dans leur propre langue : un hispanophone cherche « Español », pas
+ * « Espanhol ».
+ *
+ * ⚠️ Le FRANÇAIS a été retiré. L'application couvre le Portugal et l'Espagne, et
+ * rien d'autre : elle n'a pas de public francophone naturel, et maintenir un
+ * quatrième dictionnaire pour personne coûtait à chaque libellé ajouté. Un
+ * visiteur francophone tombe désormais sur l'anglais, comme tout visiteur dont
+ * la langue n'est pas couverte.
+ */
 export const LOCALE_LABELS: Record<Locale, string> = {
   pt: 'Português',
   es: 'Español',
-  fr: 'Français',
   en: 'English',
 };
 
@@ -20,11 +27,10 @@ export const LOCALE_LABELS: Record<Locale, string> = {
 const INTL_TAGS: Record<Locale, string> = {
   pt: 'pt-PT',
   es: 'es-ES',
-  fr: 'fr-FR',
   en: 'en-GB',
 };
 
-const DICTIONARIES: Record<Locale, Dictionary> = { pt, es, fr, en };
+const DICTIONARIES: Record<Locale, Dictionary> = { pt, es, en };
 
 const STORAGE_KEY = 'fogos.locale';
 

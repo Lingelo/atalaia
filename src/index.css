@@ -41,6 +41,28 @@
   font-family: 'Inter', sans-serif !important;
 }
 
+/*
+ * Fond topographique, mis en retrait.
+ *
+ * OpenTopoMap est conçu pour être lu SEUL : fond clair, forêts vertes, courbes
+ * de niveau, routes et toponymes, le tout à pleine saturation. Posé tel quel
+ * sous nos marqueurs, il les concurrence — les points de statut cessent d'être
+ * ce que l'œil trouve en premier, ce qui est exactement l'inverse du service
+ * rendu par cette carte.
+ *
+ * On le désature et on l'assombrit pour le ramener au rang de FOND, sans
+ * toucher à sa géométrie : le relief, les crêtes et les vallées restent
+ * parfaitement lisibles, et c'est pour eux qu'on l'a choisi. L'accessoire est
+ * atténué, l'information reste.
+ *
+ * Le filtre s'applique aux tuiles seules (pas au conteneur), pour ne pas
+ * délaver les marqueurs, les anneaux satellite et les zones de surveillance
+ * posés au-dessus.
+ */
+.atalaia-tiles-terrain {
+  filter: saturate(0.45) brightness(0.62) contrast(1.08);
+}
+
 .leaflet-control-zoom {
   border: 1px solid #2D3034 !important;
   background-color: #16191C !important;
@@ -103,5 +125,52 @@
 
 .pulse-resolucao {
   animation: resolucao-pulse 2.5s infinite;
+}
+
+/*
+ * Respiration de la couche satellite.
+ *
+ * ⚠️ L'animation porte sur les DEUX CANVAS de la couche — la nappe de densité et
+ * le rendu des anneaux — et non sur chaque foyer. C'est tout l'intérêt : le jeu
+ * mondial compte ~80 000 détections, dont plusieurs centaines à l'écran. Les
+ * animer une à une imposerait de redessiner le canvas à chaque image, à la
+ * charge du processeur. Ici, deux couches déjà rasterisées voient leur filtre
+ * varier : le compositeur GPU s'en charge seul, sans repasser par le JavaScript
+ * ni par le dessin.
+ *
+ * `filter` et non `opacity` : l'opacité de la nappe est pilotée en style inline
+ * par `SatelliteHeatLayer` (masquage pendant les zooms animés), et une animation
+ * CSS entrerait en conflit avec elle.
+ *
+ * Le pas est LENT et l'amplitude FAIBLE. Une pulsation vive attirerait l'œil sur
+ * la couche non confirmée au détriment des sinistres vérifiés — exactement la
+ * hiérarchie qu'on cherche à préserver. C'est une braise qui respire, pas une
+ * alarme.
+ */
+@keyframes satellite-braise {
+  0%,
+  100% {
+    filter: brightness(0.88);
+  }
+  50% {
+    filter: brightness(1.16);
+  }
+}
+
+.leaflet-overlay-pane canvas {
+  animation: satellite-braise 3.6s ease-in-out infinite;
+}
+
+/*
+ * Mouvement supprimé pour qui l'a demandé au niveau du système. Une carte
+ * d'incendies est consultée en situation de stress ; l'animation y est un
+ * confort, jamais une information — rien n'est perdu à l'éteindre.
+ */
+@media (prefers-reduced-motion: reduce) {
+  .leaflet-overlay-pane canvas,
+  .pulse-fire,
+  .pulse-resolucao {
+    animation: none;
+  }
 }
 

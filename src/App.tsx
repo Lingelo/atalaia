@@ -1,21 +1,21 @@
-import { useState, useMemo } from 'react';
+import { useCallback, useState, useMemo } from 'react';
 import { Incident, ViewTab, MapTileLayer, ViewScope } from './types';
 import { useActiveIncidents } from './hooks/useActiveIncidents';
 import { useSatelliteDetections } from './hooks/useSatelliteDetections';
 import { useWatchZones, useZoneAlerts } from './hooks/useWatchZones';
 import { SatelliteLayerControl } from './components/SatelliteLayerControl';
-import { SatelliteListView } from './components/SatelliteListView';
 import { computeStats, filterByScope } from './lib/scope';
+import { DEFAULT_FILTERS, filterIncidents, type ChipFilter } from './lib/filters';
 import { InteractiveMap } from './components/InteractiveMap';
 import { IncidentListView } from './components/IncidentListView';
 import { IncidentDetailPanel } from './components/IncidentDetailPanel';
-import { AnalyticsView } from './components/AnalyticsView';
 import { WatchZonesView } from './components/WatchZonesView';
 import { NavigationShell } from './components/NavigationShell';
 import { useI18n } from './i18n/context';
+import type { TranslationKey } from './i18n/pt';
 
 export default function App() {
-  const { t, n } = useI18n();
+  const { t } = useI18n();
 
   const {
     incidents: fetchedIncidents,
@@ -31,11 +31,21 @@ export default function App() {
 
   const [activeTab, setActiveTab] = useState<ViewTab>('dashboard');
   const [selectedIncidentId, setSelectedIncidentId] = useState<string | null>(null);
-  const [tileLayerType, setTileLayerType] = useState<MapTileLayer>('dark');
+  // Fond topographique par défaut : le relief explique où le feu peut aller —
+  // une crête, une vallée, une pente — là où un fond neutre ne montre que sa
+  // position. Voir `index.css` pour le traitement qui le fait RECULER derrière
+  // les marqueurs : brut, OpenTopoMap est un fond clair et chargé qui rivalise
+  // avec eux au lieu de les porter.
+  const [tileLayerType, setTileLayerType] = useState<MapTileLayer>('terrain');
 
   // Search and filters
-  const [searchTerm, setSearchTerm] = useState<string>('');
-  const [statusFilter, setStatusFilter] = useState<string>('all');
+  //
+  // Ces trois états vivent ICI, et non dans la liste, parce qu'ils gouvernent
+  // désormais les DEUX vues. Le filtre rapide mobile y a été remonté : tant
+  // qu'il restait interne à la liste, la carte ne pouvait pas en tenir compte.
+  const [searchTerm, setSearchTerm] = useState<string>(DEFAULT_FILTERS.searchTerm);
+  const [statusFilter, setStatusFilter] = useState<string>(DEFAULT_FILTERS.statusFilter);
+  const [chipFilter, setChipFilter] = useState<ChipFilter>(DEFAULT_FILTERS.chipFilter);
 
   // Abonnements « suivre cette zone », conservés en mémoire le temps de la session.
   // Stockés à part des incidents, qui sont remplacés à chaque rafraîchissement.
@@ -50,6 +60,9 @@ export default function App() {
    * de données espagnoles (trois services régionaux les publient bel et bien,
    * voir src/api/spain/), mais de ne pas confondre un sinistre confirmé au sol
    * avec une anomalie thermique vue de l'orbite.
+   *
+   * Un périmètre France a été essayé puis retiré, faute de source. Voir
+   * `ViewScope`, qui en garde la raison.
    */
   const [scope, setScope] = useState<ViewScope>('iberia');
 
@@ -57,7 +70,7 @@ export default function App() {
   // facultatif ailleurs (utile pour repérer un départ qu'aucun service n'a
   // encore enregistré). Rien n'est téléchargé tant qu'elle n'est pas demandée.
   const [showSatelliteOverlay, setShowSatelliteOverlay] = useState(false);
-  const showSatellite = scope === 'world' || showSatelliteOverlay;
+  const showSatellite = showSatelliteOverlay;
   const { detections, isLoading: isSatelliteLoading } = useSatelliteDetections(showSatellite);
 
   // Liste mobile : ouverte ou fermée, rien de plus.
@@ -70,6 +83,16 @@ export default function App() {
   // la première chose visible sur téléphone.
   const [isListOpen, setIsListOpen] = useState(false);
 
+  /**
+   * Colonne repliée, sur desktop uniquement.
+   *
+   * Séparé de `isListOpen` : replier la colonne pour rendre de la largeur à la
+   * carte n'est pas le même geste que fermer la feuille du bas d'un téléphone.
+   * Un seul état pour les deux ferait disparaître la liste sur mobile dès qu'on
+   * l'aurait repliée sur écran large.
+   */
+  const [isListCollapsed, setIsListCollapsed] = useState(false);
+
   const allIncidents = useMemo(
     () => fetchedIncidents.map((inc) => ({ ...inc, isFollowing: followedIds.has(inc.id) })),
     [fetchedIncidents, followedIds]
@@ -78,46 +101,44 @@ export default function App() {
   // Les alertes portent sur TOUS les incidents, quel que soit le périmètre
   // affiché : une zone de surveillance en Andalousie doit se déclencher même si
   // l'utilisateur regarde le Portugal à l'écran.
-  useZoneAlerts(watchZones, allIncidents);
+  const formatIncidentStatus = useCallback(
+    (incident: Incident) => t(`phase.${incident.phase}` as TranslationKey),
+    [t]
+  );
+  useZoneAlerts(watchZones, allIncidents, formatIncidentStatus);
 
   const incidents = useMemo(() => filterByScope(allIncidents, scope), [allIncidents, scope]);
 
-  /** Totaux du périmètre. Voir `computeStats` pour ce qui s'additionne ou non. */
-  const totalStats = useMemo(() => computeStats(incidents), [incidents]);
+  /**
+   * Ce que la carte ET la liste affichent : le périmètre, restreint par les
+   * filtres. Un seul tableau pour les deux, pour qu'ils ne puissent plus se
+   * contredire — voir `src/lib/filters.ts`.
+   */
+  const filters = useMemo(
+    () => ({ searchTerm, statusFilter, chipFilter }),
+    [searchTerm, statusFilter, chipFilter]
+  );
+  const visibleIncidents = useMemo(
+    () => filterIncidents(incidents, filters),
+    [incidents, filters]
+  );
 
   /**
-   * Chiffres et libellés du bandeau, gouvernés par le périmètre.
+   * Totaux du périmètre. Voir `computeStats` pour ce qui s'additionne ou non.
    *
-   * En mode Monde on ne réutilise SURTOUT PAS les tuiles opérationnelles : on
-   * décrit des foyers, une puissance et une couverture, pas des pompiers.
+   * ⚠️ Calculés sur le périmètre ENTIER, jamais sur le sous-ensemble filtré. Le
+   * bandeau annonce « sinistres en cours » pour un territoire ; le faire varier
+   * au gré d'une recherche laisserait croire que des feux s'éteignent quand on
+   * tape dans un champ de texte.
    */
-  const satelliteStats = useMemo(() => {
-    const strongest = detections.reduce((max, d) => Math.max(max, d.frpMw), 0);
-    return {
-      activeCount: detections.length,
-      personnel: Math.round(strongest),
-      vehicles: detections.filter((d) => d.confidence === 'high').length,
-      aircraft: new Set(detections.map((d) => d.countryCode).filter(Boolean)).size,
-      personnelIsPartial: false,
-    };
-  }, [detections]);
+  const totalStats = useMemo(() => computeStats(incidents), [incidents]);
 
-  const displayedStats = scope === 'world' ? satelliteStats : totalStats;
-
-  const statLabels: [string, string, string, string] =
-    scope === 'world'
-      ? [
-          t('stats.detections'),
-          `MW · ${t('stats.strongest')}`,
-          t('stats.highConfidence'),
-          t('stats.countriesAffected'),
-        ]
-      : [
+  const statLabels: [string, string, string, string] = [
           t('stats.activeOccurrences'),
           t('stats.personnel'),
           t('stats.vehicles'),
           t('stats.aircraft'),
-        ];
+          ];
 
   // Selected incident object
   const selectedIncident = useMemo(() => {
@@ -160,7 +181,7 @@ export default function App() {
       <NavigationShell
         activeTab={activeTab}
         onChangeTab={setActiveTab}
-        totalStats={displayedStats}
+        totalStats={totalStats}
         scope={scope}
         onChangeScope={setScope}
         statLabels={statLabels}
@@ -184,30 +205,25 @@ export default function App() {
         {/* TAB 1: DASHBOARD / LIVE MAP */}
         {activeTab === 'dashboard' && (
           <div className="flex-1 relative w-full h-full md:flex md:flex-row overflow-hidden">
-            {/* Liste : elle décrit CE QUE le périmètre contient. En mode Monde,
-                réutiliser les lignes opérationnelles aurait rempli la colonne de
-                « 0 opérationnel », ce qui serait faux. */}
-            {scope === 'world' ? (
-              <SatelliteListView
-                detections={detections}
-                isLoading={isSatelliteLoading}
-                isOpen={isListOpen}
-                onClose={() => setIsListOpen(false)}
-              />
-            ) : (
+            {/* Liste : elle décrit CE QUE le périmètre contient — des sinistres
+                confirmés, toujours. La couche satellite n'est plus qu'un calque
+                sur la carte : elle n'a plus de liste propre depuis le retrait du
+                mode Monde. */}
             <IncidentListView
-              incidents={incidents}
+              incidents={visibleIncidents}
               selectedIncidentId={selectedIncidentId}
               onSelectIncident={handleSelectIncident}
               searchTerm={searchTerm}
               onSearchChange={setSearchTerm}
               statusFilter={statusFilter}
               onStatusFilterChange={setStatusFilter}
+              chipFilter={chipFilter}
+              onChipFilterChange={setChipFilter}
               totalStats={totalStats}
               isOpen={isListOpen}
               onClose={() => setIsListOpen(false)}
+              isCollapsed={isListCollapsed}
             />
-            )}
 
             {/* Carte. Sur mobile elle occupe tout le cadre et la liste flotte
                 au-dessus ; sur desktop elle redevient un enfant flex.
@@ -215,8 +231,24 @@ export default function App() {
                 positionnent par rapport à la CARTE, et non par rapport à la
                 fenêtre — sans quoi elles chevauchent le panneau de détail. */}
             <div className="absolute inset-0 md:relative md:inset-auto md:flex-1 md:h-full z-0">
+              {/* Poignée de repli, desktop uniquement. Elle reste ANCRÉE au bord
+                  gauche de la carte dans les deux états : c'est le même bouton
+                  qui referme et rouvre, au même endroit. Un bouton qui se
+                  déplacerait avec la colonne obligerait à le chercher. */}
+              <button
+                type="button"
+                onClick={() => setIsListCollapsed((collapsed) => !collapsed)}
+                title={t(isListCollapsed ? 'list.expandPanel' : 'list.collapsePanel')}
+                aria-expanded={!isListCollapsed}
+                className="hidden md:flex absolute left-0 top-1/2 -translate-y-1/2 z-[400] w-5 h-14 items-center justify-center rounded-r bg-[#16191C] border border-l-0 border-[#2D3034] text-[#e5bdb9] hover:bg-[#282a2b] hover:text-[#e2e2e3] transition-colors shadow-lg"
+              >
+                <span className="material-symbols-outlined text-[18px] leading-none">
+                  {isListCollapsed ? 'chevron_right' : 'chevron_left'}
+                </span>
+              </button>
+
               <InteractiveMap
-                incidents={incidents}
+                incidents={visibleIncidents}
                 watchZones={watchZones}
                 selectedIncidentId={selectedIncidentId}
                 onSelectIncident={handleSelectIncident}
@@ -226,19 +258,15 @@ export default function App() {
                 showSatellite={showSatellite}
                 scope={scope}
                 className="w-full h-full"
+                satelliteControl={
+                  <SatelliteLayerControl
+                    isOn={showSatellite}
+                    onToggle={() => setShowSatelliteOverlay((on) => !on)}
+                    isLoading={isSatelliteLoading}
+                    detectionCount={detections.length}
+                  />
+                }
               />
-
-              {/* En mode Monde, la liste porte déjà le titre, le compteur et
-                  l'avertissement : l'encart ferait doublon. Il ne sert que de
-                  calque facultatif sur les périmètres opérationnels. */}
-              {scope !== 'world' && (
-              <SatelliteLayerControl
-                isOn={showSatellite}
-                onToggle={() => setShowSatelliteOverlay((on) => !on)}
-                isLoading={isSatelliteLoading}
-                detectionCount={detections.length}
-              />
-              )}
             </div>
 
             {/* Interrupteur de la liste, mobile uniquement. Masqué quand la liste
@@ -253,9 +281,7 @@ export default function App() {
               >
                 <span className="material-symbols-outlined text-[20px] text-[#ffb3ad]">list</span>
                 <span className="font-['Inter'] text-[14px] font-semibold tabular-nums whitespace-nowrap">
-                  {scope === 'world'
-                    ? t('list.openDetections', { count: n(detections.length) })
-                    : t('list.open', { count: incidents.length })}
+                  {t('list.open', { count: visibleIncidents.length })}
                 </span>
               </button>
             )}
@@ -272,10 +298,7 @@ export default function App() {
           </div>
         )}
 
-        {/* TAB 2: ANALYTICS / HISTÓRICO */}
-        {activeTab === 'analytics' && <AnalyticsView />}
-
-        {/* TAB 3: WATCH ZONES & ALERTS */}
+        {/* TAB 2: WATCH ZONES & ALERTS */}
         {activeTab === 'watch-zones' && (
           <WatchZonesView
             watchZones={watchZones}

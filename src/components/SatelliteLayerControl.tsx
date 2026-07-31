@@ -18,6 +18,13 @@ interface SatelliteLayerControlProps {
  * agricole. Le compteur est délibérément tenu À L'ÉCART des totaux nationaux
  * (« ocorrências ativas », « operacionais ») : additionner les deux reviendrait à
  * comparer des effectifs de pompiers avec des points chauds satellite.
+ *
+ * ⚠️ Il ne se positionne PLUS lui-même. Il flottait en haut à gauche dans un
+ * encart de 248 px qui mangeait le coin de la carte — franchement sur téléphone,
+ * sensiblement sur desktop. Il vit désormais À L'INTÉRIEUR du menu « Fonds de
+ * carte » : allumer la couche satellite et changer de fond relèvent du même
+ * geste — choisir ce que la carte montre — donc du même endroit. L'avertissement
+ * le suit, il ne se perd pas en route. Voir `InteractiveMap`.
  */
 export const SatelliteLayerControl: React.FC<SatelliteLayerControlProps> = ({
   isOn,
@@ -28,7 +35,7 @@ export const SatelliteLayerControl: React.FC<SatelliteLayerControlProps> = ({
   const { t, n } = useI18n();
 
   return (
-    <div className="absolute top-4 left-4 z-[400] w-[248px] max-w-[calc(100%-2rem)] rounded border border-[#2D3034] bg-[#16191C]/95 backdrop-blur-md shadow-2xl overflow-hidden">
+    <div className="border-t border-[#2D3034] mt-1 pt-1">
       <button
         type="button"
         onClick={onToggle}
@@ -39,7 +46,7 @@ export const SatelliteLayerControl: React.FC<SatelliteLayerControlProps> = ({
             la carte : plein = ocorrência de terrain, creux = détection satellite. */}
         <span
           className="shrink-0 w-4 h-4 rounded-full border-2"
-          style={{ borderColor: isOn ? '#8b5cf6' : '#5a5d5f' }}
+          style={{ borderColor: isOn ? '#ea580c' : '#5a5d5f' }}
         />
         <span className="flex-1 min-w-0">
           <span className="block font-['Inter'] text-[13px] font-semibold text-[#e2e2e3]">
@@ -58,7 +65,7 @@ export const SatelliteLayerControl: React.FC<SatelliteLayerControlProps> = ({
         </span>
         <span
           className={`shrink-0 w-9 h-5 rounded-full transition-colors relative ${
-            isOn ? 'bg-[#8b5cf6]' : 'bg-[#3a3d3f]'
+            isOn ? 'bg-[#ea580c]' : 'bg-[#3a3d3f]'
           }`}
         >
           <span
@@ -76,9 +83,27 @@ export const SatelliteLayerControl: React.FC<SatelliteLayerControlProps> = ({
           </p>
           {/* Sans cette phrase, la bascule densité → foyers reste invisible :
               l'utilisateur n'a aucune raison de deviner qu'il faut zoomer. */}
-          <p className="font-['Inter'] text-[11px] leading-snug text-[#8b5cf6]">
+          <p className="font-['Inter'] text-[11px] leading-snug text-[#fb923c]">
             {t('satellite.zoomHint')}
           </p>
+
+          {/* Légende de la graduation. Une couleur qui code une information sans
+              l'expliquer ne transmet rien : elle se contente de décorer. Les
+              pastilles reprennent EXACTEMENT les teintes de `emberColor`. */}
+          <div className="flex items-center gap-1.5 pt-0.5">
+            <span className="flex gap-1 shrink-0" aria-hidden="true">
+              {['#fdba74', '#fb923c', '#ea580c', '#c2410c', '#7c2d12'].map((tone) => (
+                <span
+                  key={tone}
+                  className="w-2.5 h-2.5 rounded-full border-2"
+                  style={{ borderColor: tone }}
+                />
+              ))}
+            </span>
+            <span className="font-['Inter'] text-[10px] leading-tight text-[#e5bdb9]/80">
+              {t('satellite.freshnessHint')}
+            </span>
+          </div>
         </div>
       )}
     </div>

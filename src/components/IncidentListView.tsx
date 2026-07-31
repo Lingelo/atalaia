@@ -5,6 +5,7 @@ import { resolvePhase } from '../lib/status';
 import { useI18n } from '../i18n/context';
 import { useIsDesktop } from '../hooks/useIsDesktop';
 import type { TranslationKey } from '../i18n/pt';
+import { ONGOING_FILTER, type ChipFilter } from '../lib/filters';
 
 interface IncidentListViewProps {
   incidents: Incident[];
@@ -14,9 +15,21 @@ interface IncidentListViewProps {
   onSearchChange: (term: string) => void;
   statusFilter: string;
   onStatusFilterChange: (status: string) => void;
+  /** Filtre rapide mobile. Piloté par `App`, pour que la carte le suive aussi. */
+  chipFilter: ChipFilter;
+  onChipFilterChange: (chip: ChipFilter) => void;
   /** Mobile uniquement : la liste est-elle dépliée ? Ignoré à partir de `md`. */
   isOpen: boolean;
   onClose: () => void;
+  /**
+   * Desktop uniquement : la colonne est-elle repliée ?
+   *
+   * Distinct de `isOpen`, qui ne gouverne que la feuille mobile. Les deux
+   * mécaniques répondent à des gestes différents — glisser une feuille du bas,
+   * ou rendre de la largeur à la carte — et les confondre reviendrait à masquer
+   * la liste sur téléphone quand on la replie sur écran large.
+   */
+  isCollapsed: boolean;
   totalStats: {
     activeCount: number;
     /** `null` quand aucun service du périmètre ne publie la valeur. */
@@ -71,14 +84,16 @@ export const IncidentListView: React.FC<IncidentListViewProps> = ({
   onSearchChange,
   statusFilter,
   onStatusFilterChange,
+  chipFilter,
+  onChipFilterChange,
   isOpen,
   onClose,
+  isCollapsed,
   totalStats,
 }) => {
   const { t, n, intlTag } = useI18n();
   const isDesktop = useIsDesktop();
   const [showFilterDropdown, setShowFilterDropdown] = useState(false);
-  const [activeChipFilter, setActiveChipFilter] = useState<string>('all');
 
   /**
    * Libellé traduit d'un statut, indexé sur la PHASE canonique.
@@ -103,35 +118,14 @@ export const IncidentListView: React.FC<IncidentListViewProps> = ({
     };
   };
 
-  // Filter incidents based on search, dropdown, and mobile chip filter
-  const filteredIncidents = incidents.filter((inc) => {
-    const matchesSearch =
-      searchTerm === '' ||
-      inc.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      inc.locationName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      inc.district.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      inc.municipality.toLowerCase().includes(searchTerm.toLowerCase());
-
-    const matchesStatus = statusFilter === 'all' || inc.phase === statusFilter;
-
-    let matchesChip = true;
-    if (activeChipFilter === '> 100 Ops') {
-      // `?? 0` seulement ICI : un service qui ne publie pas ses effectifs ne
-      // peut pas satisfaire un filtre « plus de 100 opérationnels ». C'est un
-      // filtre, pas un total — il restreint, il n'affirme rien.
-      matchesChip = (inc.personnel ?? 0) > 100;
-    } else if (activeChipFilter === 'Aerial Assets') {
-      matchesChip = (inc.aircraft ?? 0) > 0;
-    } else if (activeChipFilter === 'Resolution') {
-      matchesChip = resolvePhase(inc.phase).ongoing;
-    }
-
-    return matchesSearch && matchesStatus && matchesChip;
-  });
+  // Les incidents arrivent DÉJÀ filtrés : le prédicat vit dans
+  // `src/lib/filters.ts` et s'applique en amont, dans `App`, pour que la carte
+  // affiche exactement le même jeu. Refiltrer ici ferait diverger les deux vues
+  // à la première divergence de code.
 
   // Tri par gravité décroissante, puis par ancienneté. Un tri purement
   // chronologique enterrerait un feu majeur sous des départs mineurs plus récents.
-  const sortedIncidents = [...filteredIncidents].sort((a, b) => {
+  const sortedIncidents = [...incidents].sort((a, b) => {
     const severityDelta = resolvePhase(b.phase).severity - resolvePhase(a.phase).severity;
     if (severityDelta !== 0) return severityDelta;
 
@@ -157,10 +151,17 @@ export const IncidentListView: React.FC<IncidentListViewProps> = ({
     // d'écran parce que la feuille MOBILE est fermée les priverait de toute la
     // liste. Voir `useIsDesktop`.
     <aside
-      aria-hidden={!isDesktop && !isOpen}
+      aria-hidden={(!isDesktop && !isOpen) || (isDesktop && isCollapsed)}
       className={`absolute bottom-16 left-0 right-0 z-20 h-[72%] rounded-t-2xl overflow-hidden bg-[#16191C] border-t border-[#2D3034] flex flex-col transition-transform duration-300 ${
         isOpen ? 'translate-y-0' : 'translate-y-[calc(100%+4rem)] pointer-events-none'
-      } md:static md:bottom-auto md:h-full md:w-[380px] lg:w-[400px] md:translate-y-0 md:pointer-events-auto md:rounded-none md:border-t-0 md:border-r md:shrink-0`}
+      } md:static md:bottom-auto md:h-full md:translate-y-0 md:rounded-none md:border-t-0 md:shrink-0 md:transition-[width] md:duration-300 ${
+        // Repliée, la colonne ne fait plus AUCUNE largeur — elle ne se contente
+        // pas de glisser hors champ. C'est ce qui rend la place à la carte, qui
+        // est la raison d'être du bouton.
+        isCollapsed
+          ? 'md:w-0 md:border-r-0 md:pointer-events-none'
+          : 'md:w-[380px] lg:w-[400px] md:border-r md:pointer-events-auto'
+      }`}
     >
       {/* Barre de fermeture, mobile uniquement. Le résumé rappelle ce que la
           liste contient, le bouton dit explicitement ce qu'il fait. */}
@@ -188,15 +189,30 @@ export const IncidentListView: React.FC<IncidentListViewProps> = ({
       <div className="p-3 border-b border-[#2D3034] bg-[#16191C] flex flex-col gap-2">
         <div className="flex gap-2">
           <div className="flex-1 relative">
-            <span className="material-symbols-outlined absolute left-2.5 top-2.5 text-[#e5bdb9] text-[18px]">
-              search
+            {/* ⚠️ Centrage CALCULÉ, et non un `top` en dur. La glyphe Material
+                occupe une boîte de 24 px quelle que soit la taille de police
+                demandée : à `top-2.5` elle débordait de 4 px sous un champ de
+                30 px, et pendait 7 px trop bas. `leading-none` colle la boîte à
+                la glyphe, la translation la recentre quelle que soit la hauteur
+                du champ.
+
+                `pointer-events-none` : sans lui, cliquer la loupe — le geste le
+                plus naturel — ne donnait pas le focus au champ. */}
+            <span className="pointer-events-none absolute left-2.5 top-0 h-full flex items-center">
+              <span className="material-symbols-outlined leading-none text-[#e5bdb9] text-[18px]">
+                search
+              </span>
             </span>
             <input
               type="text"
               value={searchTerm}
               onChange={(e) => onSearchChange(e.target.value)}
               placeholder={t('list.searchPlaceholder')}
-              className="w-full bg-[#1e2021] border border-[#333536] text-[#e2e2e3] pl-9 pr-3 py-1.5 text-xs rounded focus:outline-none focus:border-[#ffb3ad] placeholder:text-[#e5bdb9]/60"
+              /* `h-full` : le champ s'étire à la hauteur de la ligne, comme le
+                 bouton Filtres à côté. Sans lui il faisait 30 px contre 38 —
+                 deux commandes voisines de hauteurs différentes, et une loupe
+                 qui se centrait sur le conteneur plutôt que sur le champ. */
+              className="w-full h-full bg-[#1e2021] border border-[#333536] text-[#e2e2e3] pl-9 pr-3 py-1.5 text-xs rounded focus:outline-none focus:border-[#ffb3ad] placeholder:text-[#e5bdb9]/60"
             />
           </div>
 
@@ -231,6 +247,10 @@ export const IncidentListView: React.FC<IncidentListViewProps> = ({
             </div>
             <div className="grid grid-cols-2 gap-1.5">
               {[
+                // « En cours » vient en TÊTE parce que c'est le filtre actif au
+                // chargement : l'utilisateur doit pouvoir constater ce qui le
+                // restreint, et le lever, sans avoir à le deviner.
+                { code: ONGOING_FILTER, label: t('list.chipOngoing') },
                 { code: 'all', label: t('list.all') },
                 ...availablePhases.map((phase) => ({
                   code: phase,
@@ -267,9 +287,9 @@ export const IncidentListView: React.FC<IncidentListViewProps> = ({
             <button
               key={chip}
               type="button"
-              onClick={() => setActiveChipFilter(chip)}
+              onClick={() => onChipFilterChange(chip)}
               className={`h-7 px-3 rounded text-xs whitespace-nowrap flex items-center transition-colors ${
-                activeChipFilter === chip
+                chipFilter === chip
                   ? 'bg-[#e2e2e3] text-[#121415] font-bold'
                   : 'bg-transparent border border-[#333536] text-[#e5bdb9]'
               }`}

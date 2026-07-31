@@ -91,7 +91,10 @@ export const NavigationShell: React.FC<NavigationShellProps> = ({
           langue, quatre tuiles et deux boutons. Sur un écran de portable étroit,
           mieux vaut qu'elle défile que de voir le bouton d'actualisation
           disparaître hors de l'écran, hors d'atteinte. */}
-      <header className="hidden md:flex shrink-0 z-[400] bg-[#16191C] border-b border-[#2D3034] divide-x divide-[#2D3034] items-stretch overflow-x-auto">
+      {/* ⚠️ `relative` est REQUIS pour que le `z-[400]` ci-dessous existe : un
+          z-index n'a aucun effet sur un élément `static`. Sans lui, la barre se
+          faisait recouvrir par la carte, qui la suit dans le document. */}
+      <header className="hidden md:flex relative shrink-0 z-[400] bg-[#16191C] border-b border-[#2D3034] divide-x divide-[#2D3034] items-stretch overflow-x-auto">
         {/* Nom de l'application. Il vivait dans l'en-tête de la liste des
             sinistres, donc invisible dès qu'on quittait la carte. */}
         <div className="px-4 flex items-center gap-2 shrink-0">
@@ -114,7 +117,6 @@ export const NavigationShell: React.FC<NavigationShellProps> = ({
           {(
             [
               ['dashboard', 'map', t('nav.map')],
-              ['analytics', 'analytics', t('nav.stats')],
               ['watch-zones', 'notifications_active', t('nav.alerts')],
             ] as const
           ).map(([tab, icon, label]) => (
@@ -196,17 +198,6 @@ export const NavigationShell: React.FC<NavigationShellProps> = ({
         >
           <span className="material-symbols-outlined text-[22px]">map</span>
           <span className="font-['Inter'] text-[11px] font-semibold mt-0.5">{t('nav.map')}</span>
-        </button>
-
-        <button
-          type="button"
-          onClick={() => onChangeTab('analytics')}
-          className={`flex flex-col items-center justify-center w-16 h-full transition-colors ${
-            activeTab === 'analytics' ? 'text-[#ffb3ad]' : 'text-[#e5bdb9] hover:text-[#e2e2e3]'
-          }`}
-        >
-          <span className="material-symbols-outlined text-[22px]">analytics</span>
-          <span className="font-['Inter'] text-[11px] font-semibold mt-0.5">{t('nav.stats')}</span>
         </button>
 
         <button

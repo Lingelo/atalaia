@@ -15,10 +15,8 @@
 export const pt = {
   // Navigation
   'nav.dashboard': 'Dashboard',
-  'nav.analytics': 'Histórico',
   'nav.watchZones': 'Alertas',
   'nav.map': 'Mapa',
-  'nav.stats': 'Dados',
   'nav.alerts': 'Alertas',
 
   // Périmètre affiché
@@ -29,18 +27,12 @@ export const pt = {
   'scope.portugal.hint': 'Ocorrências da ANEPC',
   'scope.spain': 'Espanha',
   'scope.spain.hint': 'Andaluzia, Catalunha e Castela e Leão',
-  'scope.world': 'Mundo',
-  'scope.world.hint': 'Deteções por satélite (NASA FIRMS)',
 
   // Bandeau de statistiques
   'stats.activeOccurrences': 'ocorrências ativas',
   'stats.personnel': 'operacionais',
   'stats.vehicles': 'veículos',
   'stats.aircraft': 'meios aéreos',
-  'stats.detections': 'focos detetados',
-  'stats.strongest': 'foco mais intenso',
-  'stats.highConfidence': 'alta confiança',
-  'stats.countriesAffected': 'países',
   'stats.refresh': 'Atualizar',
   'stats.refreshing': 'A atualizar…',
   'stats.refreshNow': 'Atualizar agora',
@@ -62,15 +54,14 @@ export const pt = {
   'list.all': 'Todos',
   'list.clear': 'Limpar',
   'list.close': 'Fechar',
+  'list.collapsePanel': 'Recolher a lista',
+  'list.expandPanel': 'Mostrar a lista',
   'list.open': '{count} ocorrências',
-  'list.openDetections': '{count} focos',
   'list.summary': '{active} ativas · {personnel} operacionais',
-  'list.summaryDetections': '{count} focos · satélite',
   'list.empty': 'Nenhuma ocorrência corresponde aos filtros.',
   'list.chipOver100': '> 100 operacionais',
   'list.chipAerial': 'Meios aéreos',
   'list.chipOngoing': 'Em combate',
-  'list.detectionRow': '{frp} MW · {passes} passagem(ns)',
 
   // Panneau de détail
   'detail.personnel': 'Operacionais',
@@ -114,12 +105,12 @@ export const pt = {
   'satellite.disclaimer':
     'Anomalias térmicas VIIRS (NASA FIRMS), não confirmadas no terreno. Podem corresponder a queimadas agrícolas, vulcões ou chamas industriais. Não são ocorrências da proteção civil.',
   'satellite.zoomHint': 'Aproxime o mapa para ver cada foco em detalhe.',
+  'satellite.freshnessHint': 'Do mais recente ao mais antigo (24 h)',
   'satellite.tooltipTitle': 'Deteção por satélite',
   'satellite.tooltipPower': '{frp} MW · {passes} passagem(ns)',
   'satellite.tooltipUnconfirmed': 'Não confirmado no terreno',
   'satellite.legendOperational': 'Ocorrência da proteção civil',
   'satellite.legendSatellite': 'Deteção por satélite',
-  'satellite.offshore': 'Fora de fronteiras',
 
   // États de chargement et erreurs
   'loading.incidents': 'A carregar ocorrências…',
@@ -148,29 +139,6 @@ export const pt = {
   'nature.agricola': 'Agrícola',
 
   // Vue historique — dados reais dos arquivos oficiais
-  'analytics.title': 'Histórico',
-  'analytics.subtitle': 'Arquivos oficiais da ANEPC e da Junta de Castilla y León.',
-  'analytics.occurrences': 'Ocorrências',
-  'analytics.burnedArea': 'Área ardida',
-  'analytics.records': '{count} registos',
-  'analytics.monthlyTitle': 'Ocorrências por mês ({year})',
-  'analytics.baseline': 'média {years}',
-  'analytics.baselineShort': 'Média',
-  'analytics.byRegion': 'Por território',
-  'analytics.notableTitle': 'Maiores incêndios registados',
-  'analytics.totalOccurrences': 'Total de ocorrências',
-  'analytics.hectares': 'Hectares (ha)',
-  'analytics.thisYear': '{year} até hoje',
-  'analytics.yearToDate': 'Ano incompleto',
-  'analytics.previousYears': 'Anos anteriores',
-  'analytics.noBurnedData': 'Área ardida não publicada por este serviço.',
-  'analytics.noData': 'sem dados',
-  'analytics.date': 'Data',
-  'analytics.sourceLine': '{source} · {from} a {to}',
-  'analytics.generatedAt': 'Agregado em {date}',
-  'analytics.loading': 'A carregar o histórico…',
-  'analytics.coverageNote':
-    'Os blocos não são somados: os arquivos não medem o mesmo. O arquivo português publica contagens de ocorrências mas quase nenhuma área ardida; o de Castela e Leão publica ambas, mas apenas durante a campanha de verão. Cada bloco indica o seu território e período.',
 
   // Zones de surveillance — reais e guardadas neste dispositivo
   'watch.title': 'Alertas',
@@ -185,9 +153,11 @@ export const pt = {
   'watch.wouldAlert': 'Dentro do raio escolhido: seria notificado.',
   'watch.wouldNotAlert': 'Fora do raio escolhido.',
   'watch.insideCount': '{count} ocorrências ativas na área',
+  'watch.insideCountOne': '1 incêndio em curso na zona',
   'watch.insideNone': 'Sem ocorrências ativas na área',
   'watch.notifDisabled': 'Notificações do navegador desativadas.',
-  'watch.notifEnable': 'Ative para receber alertas imediatos no computador.',
+  'watch.notifTabOnly': 'Os alertas só são enviados enquanto este separador estiver aberto: não há notificações em segundo plano.',
+  'watch.notifEnable': 'Ative-as para ser avisado enquanto este separador estiver aberto.',
   'watch.activate': 'Ativar',
   'watch.newAreaTitle': 'Nova área de alerta',
   'watch.locationName': 'Nome da localização',
@@ -209,6 +179,11 @@ export const pt = {
   'map.zoomIn': 'Aumentar zoom',
   'map.zoomOut': 'Diminuir zoom',
   'map.locate': 'A minha localização',
+  'map.locate.denied':
+    'Localização recusada. Autorize o acesso à sua posição nas definições do navegador e tente novamente.',
+  'map.locate.unavailable':
+    'Posição indisponível. O seu dispositivo não consegue localizar-se neste momento.',
+  'map.locate.timeout': 'A localização demorou demasiado. Tente novamente.',
   'map.layers': 'Camadas do mapa',
   'map.layerDark': 'Escuro (padrão)',
   'map.layerSatellite': 'Satélite',
@@ -216,7 +191,7 @@ export const pt = {
 
   'time.justNow': 'agora mesmo',
   'app.name': 'Atalaia',
-  'app.title': 'Atalaia — Incêndios na Península Ibérica e no mundo · Mapa em tempo real',
+  'app.title': 'Atalaia — Incêndios em Portugal e Espanha · Mapa em tempo real',
   'lang.label': 'Idioma',
 
   // Attributions

@@ -10,7 +10,6 @@
     "lint": "tsc --noEmit",
     "build:data": "node scripts/build-firms.ts && node scripts/build-incidents.ts",
     "build:incidents": "node scripts/build-incidents.ts",
-    "build:history": "node scripts/build-history.ts",
     "build:firms": "node scripts/build-firms.ts"
   },
   "dependencies": {
