@@ -5,10 +5,24 @@ on:
     branches: [main]
   # Les incidents de la protection civile évoluent à la minute ; les satellites
   # ne repassent que toutes les quelques heures. C'est donc le premier qui fixe
-  # la cadence. Un cron GitHub se déclenche au mieux toutes les 5 minutes et se
-  # trouve souvent retardé : compter sur une fraîcheur de 10 à 30 minutes.
+  # la cadence. Le déclenchement reste souvent retardé de quelques minutes :
+  # compter sur une fraîcheur de 10 à 20 minutes plutôt que sur la valeur
+  # nominale.
+  #
+  # POURQUOI 10 ET NON 5, que GitHub accepterait. Un passage émet 8 requêtes
+  # amont : fogos.pt (1), les deux services ArcGIS (1 chacun) et la Junta de
+  # Castilla y León (5, qui pagine). À 5 minutes on atteindrait 2 300 requêtes
+  # par jour ; à 10 on reste à 1 150, pour une fraîcheur déjà meilleure de
+  # moitié qu'auparavant. Ces services rendent un service public et gratuit :
+  # la marge se prend de notre côté, pas du leur.
+  #
+  # ⚠️ Cette cadence ne vaut QUE pour les incidents. Le jeu FIRMS est mis en
+  # cache à l'heure (voir plus bas) : le télécharger à chaque passage ferait
+  # descendre plusieurs gigaoctets de CSV par jour depuis la NASA, pour des
+  # orbites espacées de plusieurs heures. Le cache DIVISE cette charge par
+  # quatre par rapport au rythme précédent.
   schedule:
-    - cron: '*/15 * * * *'
+    - cron: '*/10 * * * *'
   workflow_dispatch:
 
 permissions:
@@ -52,16 +66,28 @@ jobs:
       # défaut — bloquait l'essentiel : les sinistres de la protection civile,
       # qui sont la raison d'être de cette carte.
 
-      # Repli sur le dernier jeu satellite réussi. `public/data/` étant ignoré
-      # par git, un runner neuf n'en a AUCUN : sans ce cache, un échec FIRMS
-      # laisse la couche entièrement vide plutôt que légèrement datée. Les
-      # détections portent leur horodatage et la carte les grise en vieillissant,
-      # donc resservir un jeu de quelques heures se voit à l'écran.
+      # CACHE SATELLITE À L'HEURE, et c'est ce qui rend le cron de 5 minutes
+      # soutenable. La clé porte l'heure courante : au premier passage de
+      # l'heure elle manque, le CSV est téléchargé ; les onze suivants
+      # restaurent le fichier en une seconde. On descend ainsi 24 jeux par jour
+      # au lieu de 288, pour une donnée dont les passages satellite sont espacés
+      # de plusieurs heures — rien n'est perdu en fraîcheur réelle.
+      #
+      # `restore-keys` assure en plus le repli sur le dernier jeu réussi, quelle
+      # que soit son heure : `public/data/` étant ignoré par git, un runner neuf
+      # n'en a AUCUN, et sans ce filet un échec FIRMS laisserait la couche vide
+      # plutôt que légèrement datée. Les détections portent leur horodatage et
+      # pâlissent en vieillissant : resservir un jeu d'une heure se voit.
+      - name: Heure courante (clé de cache)
+        id: hour
+        run: echo "value=$(date -u +%Y-%m-%dT%H)" >> "$GITHUB_OUTPUT"
+
       - name: Restaurer les détections satellite
+        id: firms-cache
         uses: actions/cache/restore@v4
         with:
           path: public/data/firms.json
-          key: firms-${{ github.run_id }}
+          key: firms-${{ steps.hour.outputs.value }}
           restore-keys: firms-
 
       # `continue-on-error` : une panne de la NASA dégrade la couche satellite,
@@ -69,6 +95,7 @@ jobs:
       # une couche indisponible.
       - name: Précalculer les détections satellite (NASA FIRMS)
         id: firms
+        if: steps.firms-cache.outputs.cache-hit != 'true'
         continue-on-error: true
         run: npm run build:firms
 
@@ -77,7 +104,7 @@ jobs:
         uses: actions/cache/save@v4
         with:
           path: public/data/firms.json
-          key: firms-${{ github.run_id }}
+          key: firms-${{ steps.hour.outputs.value }}
 
       # Les incidents, eux, RESTENT bloquants : sans eux la carte n'a plus de
       # sujet, et publier une page vide vaudrait moins que garder la précédente.

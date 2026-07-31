@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Une seule URL, et c'est normal : Atalaia est une application d'une seule page.
+  Les périmètres et les langues ne changent pas l'adresse, il n'y a donc rien
+  d'autre à déclarer. Un sitemap gonflé d'ancres n'apporterait rien.
+-->
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+  <url>
+    <loc>https://lingelo.github.io/atalaia/</loc>
+    <changefreq>hourly</changefreq>
+    <priority>1.0</priority>
+  </url>
+</urlset>

@@ -5,6 +5,26 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
     <title>Atalaia — Wildfires in Portugal and Spain · Live map</title>
     <meta name="description" content="Live wildfire map for Portugal and Spain. Civil protection incidents from ANEPC, INFOCA, Bombers de la Generalitat and Junta de Castilla y León, plus satellite thermal detections from NASA FIRMS." />
+    <link rel="canonical" href="https://lingelo.github.io/atalaia/" />
+    <meta name="robots" content="index, follow, max-snippet:-1, max-image-preview:large" />
+    <meta name="theme-color" content="#121415" />
+    <meta name="color-scheme" content="dark" />
+
+    <!-- Partage social. Sans ces balises, un lien vers la carte s'affiche en
+         texte nu dans une conversation, ce qui dessert un outil dont l'intérêt
+         se comprend en une phrase. -->
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="Atalaia" />
+    <meta property="og:url" content="https://lingelo.github.io/atalaia/" />
+    <meta property="og:title" content="Atalaia — Wildfires in Portugal and Spain · Live map" />
+    <meta property="og:description" content="Ongoing wildfires in Portugal and Spain, from the civil protection services themselves, with NASA FIRMS satellite detections kept as a separate layer." />
+    <meta property="og:locale" content="pt_PT" />
+    <meta property="og:locale:alternate" content="es_ES" />
+    <meta property="og:locale:alternate" content="en_GB" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Atalaia — Wildfires in Portugal and Spain" />
+    <meta name="twitter:description" content="Ongoing wildfires in Portugal and Spain, from the civil protection services themselves." />
+
     <!-- Google Fonts: Inter & Material Symbols Outlined -->
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -12,10 +32,120 @@
     <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet" />
     <!-- Leaflet CSS -->
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
+
+    <!--
+      Données structurées. Elles nomment les SOURCES et leur périodicité, ce
+      qu'un moteur — classique ou génératif — ne peut pas deviner d'une carte
+      dessinée en canvas. On y déclare aussi ce que le service NE couvre PAS :
+      mieux vaut que la limite vienne de nous que d'une réponse d'IA affirmant
+      une couverture nationale espagnole qui n'existe pas.
+    -->
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@graph": [
+        {
+          "@type": "WebApplication",
+          "@id": "https://lingelo.github.io/atalaia/#app",
+          "name": "Atalaia",
+          "url": "https://lingelo.github.io/atalaia/",
+          "applicationCategory": "Map",
+          "operatingSystem": "Any",
+          "isAccessibleForFree": true,
+          "inLanguage": ["pt-PT", "es-ES", "en-GB"],
+          "description": "Live map of ongoing wildfires in Portugal and Spain, built from the civil protection services' own feeds, with NASA FIRMS satellite thermal detections kept as a visually distinct layer.",
+          "offers": { "@type": "Offer", "price": "0", "priceCurrency": "EUR" }
+        },
+        {
+          "@type": "Dataset",
+          "@id": "https://lingelo.github.io/atalaia/#dataset",
+          "name": "Ongoing wildfire incidents in Portugal and Spain",
+          "description": "Aggregated wildfire incidents refreshed about every ten minutes. Portugal is covered nationally by ANEPC. Spain has NO national real-time service: coverage is limited to Andalusia (Plan INFOCA), Catalonia (Bombers de la Generalitat) and Castile and Leon (Junta). Fires in other autonomous communities will not appear.",
+          "isAccessibleForFree": true,
+          "spatialCoverage": { "@type": "Place", "name": "Portugal and Spain" },
+          "distribution": [
+            {
+              "@type": "DataDownload",
+              "encodingFormat": "application/json",
+              "contentUrl": "https://lingelo.github.io/atalaia/data/incidents.json"
+            }
+          ],
+          "isBasedOn": [
+            { "@type": "Dataset", "name": "ANEPC occurrences", "url": "https://fogos.pt" },
+            { "@type": "Dataset", "name": "Plan INFOCA - Junta de Andalucia", "url": "https://www.juntadeandalucia.es/medioambiente/portal/" },
+            { "@type": "Dataset", "name": "Bombers de la Generalitat de Catalunya", "url": "https://interior.gencat.cat/ca/arees_dactuacio/bombers/" },
+            { "@type": "Dataset", "name": "Incendios forestales - Junta de Castilla y Leon", "url": "https://analisis.datosabiertos.jcyl.es/explore/dataset/incendios-forestales/" },
+            { "@type": "Dataset", "name": "NASA FIRMS VIIRS active fire data", "url": "https://firms.modaps.eosdis.nasa.gov/" }
+          ]
+        }
+      ]
+    }
+    </script>
   </head>
   <body class="bg-[#121415] text-[#e2e2e3] font-['Inter',sans-serif] antialiased overflow-x-hidden selection:bg-[#d8262c] selection:text-white">
-    <div id="root"></div>
+    <!--
+      ⚠️ CE CONTENU EXISTE POUR LES ROBOTS, et React le remplace dès qu'il monte.
+
+      Le corps de la page ne contenait qu'un `<div id="root">` vide : tout étant
+      dessiné en JavaScript, un moteur qui n'exécute pas de script — ce qui est
+      le cas de la plupart des robots de moteurs génératifs — ne voyait
+      RIGOUREUSEMENT RIEN. Ni le sujet, ni les sources, ni la couverture.
+
+      Ce bloc décrit donc en texte ce que la carte montre. Il dit la même chose
+      que l'application, sources comprises, y compris ce qu'elle ne couvre pas :
+      il informe, il ne maquille pas.
+    -->
+    <div id="root">
+      <main style="max-width: 46rem; margin: 0 auto; padding: 3rem 1.5rem; line-height: 1.6">
+        <h1>Atalaia — wildfires in Portugal and Spain</h1>
+        <p>
+          Atalaia is a live map of ongoing wildfires in Portugal and Spain, built from the
+          civil protection services' own published data. It is free, requires no account,
+          and is available in Portuguese, Spanish and English.
+        </p>
+
+        <h2>Where the data comes from</h2>
+        <ul>
+          <li><strong>Portugal</strong> — ANEPC occurrences via fogos.pt: location, status, personnel, vehicles and aircraft deployed.</li>
+          <li><strong>Andalusia</strong> — Plan INFOCA, Junta de Andalucía.</li>
+          <li><strong>Catalonia</strong> — Bombers de la Generalitat de Catalunya.</li>
+          <li><strong>Castile and León</strong> — Junta de Castilla y León, including burned area.</li>
+          <li><strong>Satellite thermal detections</strong> — NASA FIRMS (VIIRS), shown as a separate, optional layer.</li>
+        </ul>
+
+        <h2>What it does not cover</h2>
+        <p>
+          There is <strong>no national Spanish real-time wildfire service</strong>. Coverage is
+          limited to the three autonomous communities listed above: a fire in Galicia,
+          Extremadura or Valencia will not appear on this map. An empty area therefore means
+          “no data”, never “no fire”. The application states this on screen, and reports the
+          status of every service it queries.
+        </p>
+
+        <h2>Confirmed incidents versus satellite detections</h2>
+        <p>
+          The two are deliberately never mixed. Civil protection incidents are drawn as solid
+          discs and carry a verified status and deployed resources. NASA FIRMS detections are
+          drawn as hollow, ember-coloured rings: they are thermal anomalies measured from
+          orbit, <strong>unconfirmed on the ground</strong>, and frequently caused by
+          agricultural burning, volcanoes or industrial flares. They are never added into
+          national totals.
+        </p>
+
+        <h2>How fresh the data is</h2>
+        <p>
+          Incidents are rebuilt roughly every ten minutes and served as static files; the
+          interface displays the age of the data itself, rather than the time you happened to
+          load the page. Satellite detections are refreshed hourly, since the satellites pass
+          over only every few hours.
+        </p>
+
+        <noscript>
+          <p><strong>This map needs JavaScript to render.</strong> The underlying data stays
+          available as JSON at <code>/atalaia/data/incidents.json</code>.</p>
+        </noscript>
+      </main>
+    </div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>
-

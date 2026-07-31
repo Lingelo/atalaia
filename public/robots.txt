@@ -1,0 +1,26 @@
+# Atalaia — carte des incendies au Portugal et en Espagne
+#
+# ⚠️ GitHub Pages sert ce site sous /atalaia/, or les robots ne lisent le
+# robots.txt qu'à la RACINE du domaine. Ce fichier n'est donc PAS celui qui fait
+# autorité pour lingelo.github.io : il documente l'intention et sert de repli si
+# le site déménage un jour sur son propre domaine.
+
+User-agent: *
+Allow: /
+
+# Les robots des moteurs génératifs sont explicitement bienvenus : ces données
+# sont publiques, elles proviennent de services d'État, et une réponse d'IA
+# correctement sourcée vaut mieux qu'une approximation.
+User-agent: GPTBot
+Allow: /
+
+User-agent: ClaudeBot
+Allow: /
+
+User-agent: PerplexityBot
+Allow: /
+
+User-agent: Google-Extended
+Allow: /
+
+Sitemap: https://lingelo.github.io/atalaia/sitemap.xml
