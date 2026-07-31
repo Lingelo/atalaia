@@ -138,7 +138,21 @@ export function matchesZone(zone: WatchZone, incident: Incident, now: Date): boo
  * La mémoire vit dans une `ref` et non dans un état : la modifier ne doit pas
  * provoquer de rendu, elle ne change rien à ce qui est affiché.
  */
-export function useZoneAlerts(zones: WatchZone[], incidents: Incident[]): void {
+export function useZoneAlerts(
+  zones: WatchZone[],
+  incidents: Incident[],
+  /**
+   * Libellé d'état à afficher dans la notification.
+   *
+   * Injecté plutôt que lu ici : ce hook n'a pas à connaître l'i18n, et le
+   * statut BRUT du service (« Em Curso ») apparaissait tel quel dans une
+   * notification par ailleurs traduite. Dans l'application le libellé d'origine
+   * reste affiché à côté du libellé traduit, parce que c'est lui qui fait foi ;
+   * une notification n'a la place que d'un seul des deux, et c'est celui que
+   * l'utilisateur lit dans sa langue qui l'emporte.
+   */
+  formatStatus: (incident: Incident) => string
+): void {
   const notified = useRef<Set<string>>(new Set());
 
   useEffect(() => {
@@ -159,7 +173,7 @@ export function useZoneAlerts(zones: WatchZone[], incidents: Incident[]): void {
 
         const distance = distanceKm(zone.lat, zone.lng, incident.lat, incident.lng);
         new Notification(zone.name, {
-          body: `${incident.title} — ${incident.status} · ${distance.toFixed(1)} km`,
+          body: `${incident.title} — ${formatStatus(incident)} · ${distance.toFixed(1)} km`,
           // Une notification par couple : les suivantes remplacent la
           // précédente plutôt que d'empiler des doublons visuels.
           tag: key,
@@ -172,5 +186,5 @@ export function useZoneAlerts(zones: WatchZone[], incidents: Incident[]): void {
     for (const key of notified.current) {
       if (!stillRelevant.has(key)) notified.current.delete(key);
     }
-  }, [zones, incidents]);
+  }, [zones, incidents, formatStatus]);
 }

@@ -16,11 +16,19 @@ import { SpatialIndex } from './spatialIndex';
  * Une nappe dit ce que la mesure dit réellement : « activité thermique diffuse
  * dans cette zone ». Le flou n'est pas un défaut de rendu, c'est l'information.
  *
- * DÉGRADÉ VIOLET, JAMAIS ROUGE-ORANGE. Les dégradés de chaleur habituels vont du
- * jaune au rouge, exactement la palette réservée aux statuts opérationnels. Une
- * tache rouge sous un marqueur rouge annulerait la séparation entre donnée de
- * terrain vérifiée et détection non confirmée. C'est une contrainte de lisibilité,
- * pas un choix esthétique.
+ * DÉGRADÉ BRAISE, ET NON LA PALETTE DES STATUTS. La couche était violette, pour
+ * mettre le maximum de distance chromatique avec les sinistres confirmés. Elle
+ * est passée à la braise — brun-rouge profond vers l'orange brûlé — parce qu'un
+ * violet ne dit pas « feu » à qui découvre la carte.
+ *
+ * ⚠️ Le garde-fou n'a pas disparu, il a changé de porteur. Les statuts occupent
+ * le spectre chaud VIF (orange #f97316, rouge #ef4444, ambre #fbbf24, jaune
+ * #eab308) ; la braise reste en dessous, plus sombre et plus désaturée, et ne
+ * croise donc aucun statut. Surtout, c'est désormais la FORME qui sépare les
+ * deux couches : nappe diffuse et anneaux CREUX ici, disques PLEINS pour les
+ * sinistres. Ne jamais remplir ces anneaux, ni pousser ce dégradé vers le rouge
+ * vif : ce serait effacer la frontière entre une mesure orbitale non confirmée
+ * et un feu vérifié au sol.
  *
  * Écrit à la main plutôt qu'avec un greffon : le besoin tient en une centaine de
  * lignes, et le projet vient d'être débarrassé de neuf dépendances inutilisées.
@@ -40,7 +48,7 @@ const PADDING_PX = 80;
 
 /**
  * Construit la table de correspondance densité → couleur (256 entrées).
- * Du violet profond presque transparent au lilas clair pour les foyers denses.
+ * Du brun de braise presque transparent à l'orange vif pour les foyers denses.
  */
 function buildPalette(): Uint8ClampedArray {
   const canvas = document.createElement('canvas');
@@ -50,11 +58,11 @@ function buildPalette(): Uint8ClampedArray {
   if (!ctx) return new Uint8ClampedArray(256 * 4);
 
   const gradient = ctx.createLinearGradient(0, 0, 256, 0);
-  gradient.addColorStop(0.0, 'rgba(76, 29, 149, 0)');
-  gradient.addColorStop(0.25, 'rgba(91, 33, 182, 0.75)');
-  gradient.addColorStop(0.5, 'rgba(124, 58, 237, 0.9)');
-  gradient.addColorStop(0.75, 'rgba(167, 139, 250, 0.95)');
-  gradient.addColorStop(1.0, 'rgba(233, 213, 255, 1)');
+  gradient.addColorStop(0.0, 'rgba(67, 20, 7, 0)');
+  gradient.addColorStop(0.25, 'rgba(124, 45, 18, 0.75)');
+  gradient.addColorStop(0.5, 'rgba(154, 52, 18, 0.9)');
+  gradient.addColorStop(0.75, 'rgba(194, 65, 12, 0.95)');
+  gradient.addColorStop(1.0, 'rgba(234, 88, 12, 1)');
 
   ctx.fillStyle = gradient;
   ctx.fillRect(0, 0, 256, 1);

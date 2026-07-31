@@ -112,6 +112,20 @@ export const WatchZonesView: React.FC<WatchZonesViewProps> = ({
         <div className="p-4 border-b border-[#333536] flex flex-col gap-3">
           <h2 className="font-['Inter'] text-[24px] font-semibold text-[#e2e2e3] mb-3">{t('watch.title')}</h2>
 
+          {/* ⚠️ AVERTISSEMENT PERMANENT, affiché une fois les notifications
+              accordées. Il n'y a ni service worker ni push : les alertes sont
+              émises par du JavaScript de page, donc uniquement tant que cet
+              onglet vit. Sans cette phrase, quelqu'un peut fermer Atalaia en
+              croyant rester couvert — et, sur une carte d'incendies, compter
+              là-dessus pour sa maison. La limite doit être dite là où la
+              promesse est faite. */}
+          {notificationPermission === 'granted' && (
+            <p className="font-['Inter'] text-[12px] leading-snug text-[#e5bdb9]/80 flex items-start gap-2">
+              <span className="material-symbols-outlined text-[16px] shrink-0">info</span>
+              {t('watch.notifTabOnly')}
+            </p>
+          )}
+
           {/* Browser Notification Banner */}
           {notificationPermission !== 'granted' && (
             <div className="bg-[#282a2b] p-3 rounded border border-[#333536] flex items-start gap-3">
@@ -171,7 +185,12 @@ export const WatchZonesView: React.FC<WatchZonesViewProps> = ({
 
                     return inside > 0 ? (
                       <span className="text-[#ffb3ad] font-semibold">
-                        {t('watch.insideCount', { count: n(inside) })}
+                        {/* Le moteur d'interpolation ne gère pas les pluriels :
+                            « 1 sinistres » s'affichait au singulier. Deux clés
+                            plutôt qu'une bibliothèque de plus pour un seul cas. */}
+                        {t(inside === 1 ? 'watch.insideCountOne' : 'watch.insideCount', {
+                          count: n(inside),
+                        })}
                       </span>
                     ) : (
                       <span className="text-[#e5bdb9]/60">{t('watch.insideNone')}</span>

@@ -64,7 +64,20 @@ export async function queryEsriLayer<A>(
     params.set('resultRecordCount', String(options.resultRecordCount));
   }
 
-  const response = await fetch(`${layerUrl}/query?${params.toString()}`, { signal });
+  // ⚠️ Paramètre anti-cache, et non une coquetterie : le service de l'INFOCA
+  // répond `max-age=0, must-revalidate`, et Chrome finit par garder une réponse
+  // TRONQUÉE sous cette URL — vraisemblablement une requête interrompue en vol
+  // (`AbortController`) dont le corps partiel a été retenu. La réponse revient
+  // alors coupée en plein JSON, à chaque appel, y compris après un rechargement
+  // forcé et malgré `cache: 'no-store'`. Seule une URL distincte y échappe.
+  // Le service est de toute façon donné comme non cachable : on ne perd rien.
+  // Constaté le 31/07/2026 sur Chrome 140.
+  params.set('_', String(Date.now()));
+
+  const response = await fetch(`${layerUrl}/query?${params.toString()}`, {
+    signal,
+    cache: 'no-store',
+  });
   if (!response.ok) throw new Error(`ArcGIS ${response.status}`);
 
   const payload = (await response.json()) as EsriQueryResponse<A>;

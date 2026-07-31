@@ -266,113 +266,7 @@ export interface WatchZone {
   quietHoursEnd: string;
 }
 
-// --- Types de la vue Analytics ---------------------------------------------
 //
-// Alimentés par `public/data/history.json`, produit par `scripts/build-history.ts`
-// à partir des archives RÉELLES des services (voir ce script pour le détail des
-// requêtes). Plus aucune donnée inventée ici.
-//
-// Chaque bloc porte sa propre couverture, parce qu'elle diffère : l'archive
-// portugaise donne des DÉCOMPTES d'occurrences mais presque aucune surface
-// brûlée (2 valeurs sur 1 000 relevées), là où celle de Castilla y León donne
-// de vraies surfaces. Un écran qui mélangerait les deux sous un seul titre
-// laisserait croire à une couverture homogène qui n'existe pas.
-
-/** Décompte réel d'occurrences pour un mois donné. */
-export interface MonthlyCount {
-  /** 1 à 12. Le libellé est produit à l'affichage, selon la langue. */
-  month: number;
-  /**
-   * Occurrences du mois pour l'année en cours.
-   *
-   * ⚠️ `null` signifie « pas de donnée », et JAMAIS « aucun incendie ». Deux
-   * situations distinctes le produisent, et toutes deux se liraient de travers
-   * en 0 :
-   *
-   *   - le mois n'est pas encore arrivé (nous sommes en juillet) ; un 0 ferait
-   *     plonger la courbe à zéro pour le reste de l'année, donnant l'image
-   *     d'une saison qui s'effondre ;
-   *   - la source ne publie pas ce mois-là. Le bulletin de Castilla y León ne
-   *     paraît que pendant la campagne estivale : un 0 en janvier affirmerait
-   *     qu'il n'y brûle rien en hiver, ce qui est faux.
-   */
-  count: number | null;
-  /**
-   * Moyenne du même mois sur les années de référence (voir `baselineYears`).
-   * null quand aucune année de référence ne couvre ce mois.
-   */
-  baseline: number | null;
-}
-
-/** Total réel d'une année civile. */
-export interface YearlyCount {
-  year: number;
-  incidents: number;
-  /** null quand la source ne publie pas de surface exploitable. */
-  burnedHa: number | null;
-  /** L'année est-elle encore en cours ? Interdit de la comparer telle quelle. */
-  partial: boolean;
-}
-
-/** Agrégat réel par territoire (district portugais, provincia espagnole). */
-export interface RegionStat {
-  name: string;
-  incidents: number;
-  /** null quand la source ne publie pas de surface exploitable pour ce territoire. */
-  burnedHa: number | null;
-}
-
-/** Occurrence réelle marquante, retenue sur la surface brûlée publiée. */
-export interface NotableFire {
-  id: string;
-  name: string;
-  location: string;
-  /** Date de début réelle, en millisecondes epoch. */
-  startedAt: number;
-  burnedHa: number;
-}
-
-/**
- * Bloc d'historique d'UN service, avec sa couverture explicite.
- *
- * `coverage` n'est pas décoratif : c'est ce qui empêche de lire « 3 950
- * occurrences en juillet » comme une valeur ibérique alors qu'elle ne décrit
- * qu'un pays, ou qu'une seule communauté autonome.
- */
-export interface HistoryBlock {
-  source: IncidentSource;
-  /** Territoire couvert, tel que publié par le service. */
-  coverage: string;
-  /** Année en cours, celle des `count` de `monthly`. */
-  currentYear: number;
-  /** Années servant de référence pour `baseline`. Vide si l'archive est trop courte. */
-  baselineYears: number[];
-  /** Première et dernière date réellement présentes dans l'archive (epoch ms). */
-  rangeStart: number;
-  rangeEnd: number;
-  /** Occurrences totales de l'archive exploitée. */
-  totalIncidents: number;
-  /** Surface brûlée totale, ou null si le service n'en publie pas d'exploitable. */
-  totalBurnedHa: number | null;
-  monthly: MonthlyCount[];
-  /**
-   * Totaux par année civile, pour situer l'année en cours.
-   *
-   * Séparé de `monthly` parce qu'il coûte infiniment moins cher à obtenir côté
-   * portugais : un décompte par année (4 requêtes) là où une courbe de référence
-   * mensuelle en demanderait 36, que le quota de l'API ne laisse pas passer.
-   * Vide quand la source ne permet pas de remonter dans le temps.
-   */
-  yearly: YearlyCount[];
-  regions: RegionStat[];
-  notable: NotableFire[];
-}
-
-export interface HistoryPayload {
-  /** Instant de production de l'agrégat, pour afficher son âge réel. */
-  generatedAt: number;
-  blocks: HistoryBlock[];
-}
 
 /**
  * Périmètre affiché.
@@ -382,20 +276,22 @@ export interface HistoryPayload {
  *   régionaux — Andalucía, Catalunya, Castilla y León — et non par un service
  *   national, qui n'existe pas. Le mode l'annonce plutôt que de le masquer.
  *
- * `world` : détections satellite NASA FIRMS, seule source réellement mondiale.
+ * ⚠️ PAS DE PÉRIMÈTRE FRANCE, et ce n'est pas un oubli. Il a été ajouté puis
+ *   retiré : aucun flux public ne publie les interventions des SDIS en temps
+ *   réel (la BDIFF et Prométhée sont des archives, feuxdeforet.fr agrège des
+ *   signalements citoyens derrière une convention). Le périmètre n'aurait donc
+ *   affiché que des détections VIIRS, sans statut ni moyens engagés — il aurait
+ *   porté le nom d'un pays sans tenir la promesse des trois autres. Les foyers
+ *   français restent visibles dans le périmètre Monde, à leur juste titre.
  *
  * Les deux familles restent séparées : une détection satellite n'est pas un
  * sinistre confirmé, et les mélanger dans un même total comparerait des
  * effectifs de pompiers à des points chauds vus de l'orbite.
  */
-export type ViewScope = 'portugal' | 'spain' | 'iberia' | 'world';
+export type ViewScope = 'portugal' | 'spain' | 'iberia';
 
 /** Périmètres opérationnels, par opposition au périmètre satellite. */
 export const OPERATIONAL_SCOPES = ['portugal', 'spain', 'iberia'] as const;
 
-export function isOperationalScope(scope: ViewScope): boolean {
-  return scope !== 'world';
-}
-
-export type ViewTab = 'dashboard' | 'analytics' | 'watch-zones';
+export type ViewTab = 'dashboard' | 'watch-zones';
 export type MapTileLayer = 'dark' | 'satellite' | 'terrain';

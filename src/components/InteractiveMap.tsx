@@ -6,6 +6,7 @@ import { formatTimeAgo } from '../lib/time';
 import { SatelliteHeatLayer } from './map/SatelliteHeatLayer';
 import { SpatialIndex } from './map/spatialIndex';
 import { useI18n } from '../i18n/context';
+import type { TranslationKey } from '../i18n/pt';
 
 /**
  * Seuil de bascule nappe → anneaux individuels.
@@ -15,6 +16,35 @@ import { useI18n } from '../i18n/context';
  * (puissance, satellites, nombre de passages) redevient pertinent.
  */
 const DETAIL_ZOOM = 9;
+
+/**
+ * Teinte d'un foyer satellite selon l'ANCIENNETÉ de sa détection.
+ *
+ * POURQUOI graduer, et pourquoi par la fraîcheur plutôt que par la puissance :
+ *
+ * Le jeu VIIRS couvre 24 heures glissantes. Des anneaux uniformes y mettent sur
+ * le même plan un foyer vu il y a une heure et un autre vu la veille — or c'est
+ * précisément la distinction utile : « où ça brûle MAINTENANT ». La puissance,
+ * elle, est déjà portée par le RAYON de l'anneau ; la coder aussi en couleur
+ * ferait doublon.
+ *
+ * ⚠️ La gamme reste dans la BRAISE, du plus vif au plus éteint, et ne croise à
+ * aucun moment la palette des statuts opérationnels (orange #f97316, rouge
+ * #ef4444, ambre #fbbf24, jaune #eab308). Une détection graduée reste une
+ * détection : elle n'emprunte pas la sémantique d'un sinistre confirmé, où le
+ * vert dit « éteint » et le rouge « en cours ». Ici rien n'est éteint — le
+ * satellite ne sait pas si un feu a été combattu, seulement qu'il rayonnait au
+ * moment du passage.
+ */
+function emberColor(detectedAt: number, now: number): string {
+  const hours = (now - detectedAt) / 3_600_000;
+
+  if (hours < 3) return '#fdba74';
+  if (hours < 6) return '#fb923c';
+  if (hours < 12) return '#ea580c';
+  if (hours < 24) return '#c2410c';
+  return '#7c2d12';
+}
 
 interface InteractiveMapProps {
   incidents: Incident[];
@@ -31,6 +61,14 @@ interface InteractiveMapProps {
   isPickerMode?: boolean;
   pickerPos?: { lat: number; lng: number; radiusKm: number };
   onPickerPosChange?: (lat: number, lng: number) => void;
+  /**
+   * Interrupteur de la couche satellite, rendu dans le menu des fonds de carte.
+   *
+   * Passé en `ReactNode` plutôt que reconstruit ici : l'état de la couche, son
+   * chargement et son compteur appartiennent à `App`, et la carte n'a pas à les
+   * connaître pour loger la commande au bon endroit.
+   */
+  satelliteControl?: React.ReactNode;
   className?: string;
 }
 
@@ -47,6 +85,7 @@ export const InteractiveMap: React.FC<InteractiveMapProps> = ({
   isPickerMode = false,
   pickerPos,
   onPickerPosChange,
+  satelliteControl,
   className = 'w-full h-full',
 }) => {
   const mapContainerRef = useRef<HTMLDivElement>(null);
@@ -69,6 +108,11 @@ export const InteractiveMap: React.FC<InteractiveMapProps> = ({
   const [zoom, setZoom] = useState(7);
   /** Incrémenté à chaque déplacement : redéclenche le filtrage des anneaux. */
   const [moveTick, setMoveTick] = useState(0);
+  /** Suivi de la géolocalisation, pour en rendre compte plutôt que d'échouer en silence. */
+  const [locateStatus, setLocateStatus] = useState<
+    'idle' | 'searching' | 'denied' | 'unavailable' | 'timeout'
+  >('idle');
+  const [showLayerMenu, setShowLayerMenu] = useState(false);
 
   // Tile layer URLs
   const getTileUrl = (type: MapTileLayer) => {
@@ -95,6 +139,30 @@ export const InteractiveMap: React.FC<InteractiveMapProps> = ({
     }
   };
 
+  /**
+   * Options propres à chaque fond.
+   *
+   * `maxZoom` n'est PAS uniforme, contrairement à ce qu'on faisait : OpenTopoMap
+   * ne publie rien au-delà du niveau 17. Annoncer 19 laissait l'utilisateur
+   * zoomer sur deux niveaux de tuiles inexistantes — une carte grise, sans
+   * message, qu'on ne peut interpréter que comme une panne.
+   *
+   * `className` porte le traitement visuel défini dans `index.css`. Seul le fond
+   * topographique en reçoit un : il est clair et dense, et sans atténuation les
+   * marqueurs de statut cessent d'être ce que l'œil voit en premier.
+   */
+  const getTileOptions = (type: MapTileLayer): { maxZoom: number; className?: string } => {
+    switch (type) {
+      case 'satellite':
+        return { maxZoom: 19 };
+      case 'terrain':
+        return { maxZoom: 17, className: 'atalaia-tiles-terrain' };
+      case 'dark':
+      default:
+        return { maxZoom: 19 };
+    }
+  };
+
   // Couleur de statut : voir le registre unique dans src/lib/status.ts.
 
   // Initialize map instance
@@ -110,7 +178,7 @@ export const InteractiveMap: React.FC<InteractiveMapProps> = ({
       });
 
       const tileLayer = L.tileLayer(getTileUrl(tileLayerType), {
-        maxZoom: 19,
+        ...getTileOptions(tileLayerType),
         attribution: getTileAttribution(tileLayerType),
       }).addTo(map);
 
@@ -133,6 +201,57 @@ export const InteractiveMap: React.FC<InteractiveMapProps> = ({
         mapRef.current.remove();
         mapRef.current = null;
       }
+
+      // Toutes ces couches appartenaient à la carte qu'on vient de détruire.
+      // Les oublier explicitement est ce qui rend l'effet REJOUABLE : sans cette
+      // remise à zéro, un second passage retrouve `heatLayerRef` non vide, en
+      // conclut que la nappe est déjà posée, et ne la rattache jamais à la
+      // nouvelle carte — la couche satellite disparaît alors sans erreur.
+      // C'est exactement ce que StrictMode provoque en développement.
+      tileLayerRef.current = null;
+      canvasRendererRef.current = null;
+      satelliteGroupRef.current = null;
+      markersGroupRef.current = null;
+      polygonsGroupRef.current = null;
+      zonesGroupRef.current = null;
+      heatLayerRef.current = null;
+      pickerMarkerRef.current = null;
+    };
+  }, []);
+
+  /**
+   * Recalcule la taille de la carte quand son CONTENEUR change, et pas
+   * seulement quand la fenêtre change.
+   *
+   * ⚠️ Leaflet n'écoute que `window.resize`. Replier la colonne de gauche élargit
+   * le conteneur sans toucher à la fenêtre : la carte gardait donc en mémoire son
+   * ancienne largeur, ne demandait aucune tuile pour la bande libérée, et
+   * laissait une zone noire à droite. Rien dans l'interface ne permettait de
+   * comprendre pourquoi.
+   *
+   * Le `requestAnimationFrame` fusionne les notifications : la colonne se replie
+   * par une transition de 300 ms, l'observateur se déclenche donc à chaque image,
+   * et recalculer les tuiles autant de fois serait du gaspillage.
+   */
+  useEffect(() => {
+    const container = mapContainerRef.current;
+    if (!container) return;
+
+    let frame: number | null = null;
+    const observer = new ResizeObserver(() => {
+      if (frame !== null) return;
+      frame = requestAnimationFrame(() => {
+        frame = null;
+        // `animate: false` : on suit un redimensionnement en cours, pas un
+        // déplacement. Une animation par image se verrait comme un tremblement.
+        mapRef.current?.invalidateSize({ animate: false, pan: false });
+      });
+    });
+
+    observer.observe(container);
+    return () => {
+      observer.disconnect();
+      if (frame !== null) cancelAnimationFrame(frame);
     };
   }, []);
 
@@ -144,7 +263,7 @@ export const InteractiveMap: React.FC<InteractiveMapProps> = ({
     }
 
     const newTileLayer = L.tileLayer(getTileUrl(tileLayerType), {
-      maxZoom: 19,
+      ...getTileOptions(tileLayerType),
       attribution: getTileAttribution(tileLayerType),
     }).addTo(mapRef.current);
 
@@ -210,7 +329,11 @@ export const InteractiveMap: React.FC<InteractiveMapProps> = ({
             background-color: ${color};
             border-radius: 50%;
             border: 1.5px solid ${isSelected ? '#ffffff' : '#0c0e0f'};
-            box-shadow: ${isSelected ? '0 0 15px 4px ' + color : 'none'};
+            box-shadow: ${
+              isSelected
+                ? '0 0 15px 4px ' + color + ', 0 1px 4px rgba(0,0,0,0.9)'
+                : '0 0 0 1px rgba(0,0,0,0.45), 0 1px 4px rgba(0,0,0,0.75)'
+            };
             display: flex;
             align-items: center;
             justify-content: center;
@@ -326,7 +449,7 @@ export const InteractiveMap: React.FC<InteractiveMapProps> = ({
   //
   // Distinction visuelle volontairement REDONDANTE avec la couche opérationnelle :
   //   - forme  : anneau CREUX, là où les incidents sont des disques PLEINS
-  //   - teinte : violet, absent de la palette des statuts
+  //   - teinte : braise sombre, sous le spectre chaud VIF des statuts
   // La forme seule suffit à les séparer, ce qui rend la carte lisible même en cas
   // de daltonisme. Une simple différence de couleur ne l'aurait pas garanti.
   useEffect(() => {
@@ -334,6 +457,10 @@ export const InteractiveMap: React.FC<InteractiveMapProps> = ({
 
     satelliteGroupRef.current.clearLayers();
     if (!showSatellite || isPickerMode || zoom < DETAIL_ZOOM) return;
+
+    // Un seul instant de référence pour toute la passe : lire l'horloge par
+    // foyer ferait varier la teinte au sein d'un même rendu, pour rien.
+    const renderedAt = Date.now();
 
     // Seuls les foyers visibles sont tracés : au-delà du seuil de zoom, l'emprise
     // à l'écran n'en contient qu'une poignée sur les 86 000 du jeu mondial.
@@ -355,8 +482,17 @@ export const InteractiveMap: React.FC<InteractiveMapProps> = ({
       const ring = L.circleMarker([detection.lat, detection.lng], {
         renderer: canvasRendererRef.current ?? undefined,
         radius,
-        color: detection.confidence === 'high' ? '#c4b5fd' : '#8b5cf6',
-        weight: detection.confidence === 'high' ? 2 : 1.5,
+        // Braise graduée par fraîcheur : voir `emberColor`, qui explique
+        // pourquoi cette gamme ne croise jamais la palette des statuts.
+        color: emberColor(detection.detectedAt, renderedAt),
+        // ⚠️ La confiance passe par l'ÉPAISSEUR, maintenant que la couleur code
+        // l'ancienneté. Deux informations sur une même teinte s'annuleraient.
+        //
+        // Anneau épais dans tous les cas : la couleur ne sépare plus les deux
+        // couches aussi franchement que le violet le faisait, c'est donc la
+        // FORME qui porte la distinction. Elle doit se voir sans hésitation — et
+        // elle reste lisible en cas de daltonisme, là où une teinte ne l'est pas.
+        weight: detection.confidence === 'high' ? 3 : 2,
         // `fill: false` porte toute la distinction : un anneau, jamais un disque.
         fill: false,
         interactive: true,
@@ -364,7 +500,7 @@ export const InteractiveMap: React.FC<InteractiveMapProps> = ({
 
       const detectedAgo = formatTimeAgo(detection.detectedAt, intlTag, t('time.justNow'));
       ring.bindTooltip(
-        `<div style="font-weight:700;color:#c4b5fd">${t('satellite.tooltipTitle')}</div>
+        `<div style="font-weight:700;color:#fb923c">${t('satellite.tooltipTitle')}</div>
          <div style="color:#e2e2e3">${t('satellite.tooltipPower', {
            frp: detection.frpMw.toFixed(1),
            passes: detection.passes,
@@ -453,7 +589,6 @@ export const InteractiveMap: React.FC<InteractiveMapProps> = ({
       portugal: { center: [39.5, -8.0], zoom: 7 },
       spain: { center: [40.0, -3.7], zoom: 6 },
       iberia: { center: [39.8, -5.5], zoom: 6 },
-      world: { center: [15, 10], zoom: 2 },
     };
 
     const { center, zoom } = framing[scope];
@@ -475,23 +610,43 @@ export const InteractiveMap: React.FC<InteractiveMapProps> = ({
   // Controls helper functions
   const handleZoomIn = () => mapRef.current?.zoomIn();
   const handleZoomOut = () => mapRef.current?.zoomOut();
-  const handleResetView = () =>
-    scope === 'world'
-      ? mapRef.current?.flyTo([15, 10], 2)
-      : mapRef.current?.flyTo([39.8, -5.5], 6);
+  /**
+   * Centre la carte sur la position de l'utilisateur.
+   *
+   * ⚠️ L'échec ne recadre PLUS sur la péninsule. C'était le défaut de la version
+   * précédente : quand la position était refusée ou introuvable, la carte
+   * sautait ailleurs sans un mot. L'utilisateur voyait un mouvement, donc une
+   * réaction, et ne pouvait qu'en conclure que le bouton fonctionnait mal. Un
+   * échec doit se dire, pas se déguiser en succès.
+   *
+   * Le `timeout` est indispensable : sans lui, la promesse peut ne jamais
+   * revenir, et le bouton reste indéfiniment en attente.
+   */
   const handleLocateMe = () => {
-    if ('geolocation' in navigator) {
-      navigator.geolocation.getCurrentPosition(
-        (pos) => {
-          mapRef.current?.flyTo([pos.coords.latitude, pos.coords.longitude], 10);
-        },
-        () => {
-          handleResetView();
-        }
-      );
-    } else {
-      handleResetView();
+    if (!('geolocation' in navigator)) {
+      setLocateStatus('unavailable');
+      return;
     }
+
+    setLocateStatus('searching');
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        setLocateStatus('idle');
+        mapRef.current?.flyTo([pos.coords.latitude, pos.coords.longitude], 10);
+      },
+      (error) => {
+        // Chaque cause appelle une conduite différente : autoriser dans le
+        // navigateur, réessayer, ou renoncer. Un message unique les mélangerait.
+        setLocateStatus(
+          error.code === error.PERMISSION_DENIED
+            ? 'denied'
+            : error.code === error.TIMEOUT
+              ? 'timeout'
+              : 'unavailable'
+        );
+      },
+      { timeout: 10_000, maximumAge: 60_000, enableHighAccuracy: false }
+    );
   };
 
   return (
@@ -520,25 +675,58 @@ export const InteractiveMap: React.FC<InteractiveMapProps> = ({
           </button>
         </div>
 
+        {/* L'échec s'affiche À CÔTÉ du bouton qui l'a provoqué, et non dans un
+            bandeau lointain : c'est là que l'utilisateur regarde. Il se referme
+            au clic suivant, sans minuterie — rien ne presse, et une alerte qui
+            s'évapore avant d'être lue ne vaut pas mieux que pas d'alerte. */}
+        {locateStatus !== 'idle' && locateStatus !== 'searching' && (
+          <div className="absolute right-12 bottom-[52px] w-[220px] rounded border border-[#2D3034] bg-[#16191C] px-3 py-2 shadow-xl">
+            <p className="font-['Inter'] text-[11px] leading-snug text-[#e5bdb9]">
+              {t(`map.locate.${locateStatus}` as TranslationKey)}
+            </p>
+          </div>
+        )}
+
         <button
           type="button"
           onClick={handleLocateMe}
+          disabled={locateStatus === 'searching'}
           title={t('map.locate')}
-          className="w-10 h-10 bg-[#16191C] border border-[#2D3034] rounded flex items-center justify-center hover:bg-[#282a2b] transition-colors text-[#e5bdb9] hover:text-[#e2e2e3] shadow-lg"
+          className="w-10 h-10 bg-[#16191C] border border-[#2D3034] rounded flex items-center justify-center hover:bg-[#282a2b] transition-colors text-[#e5bdb9] hover:text-[#e2e2e3] shadow-lg disabled:opacity-60"
         >
-          <span className="material-symbols-outlined text-[20px]">my_location</span>
+          <span
+            className={`material-symbols-outlined text-[20px] ${
+              locateStatus === 'searching' ? 'animate-spin' : ''
+            }`}
+          >
+            {locateStatus === 'searching' ? 'progress_activity' : 'my_location'}
+          </span>
         </button>
 
         {/* Tile Layer Switcher */}
-        <div className="relative group">
+        {/* ⚠️ Menu ouvert au CLIC, et non au survol comme auparavant. Un
+            `group-hover` n'existe pas au doigt : sur téléphone, ce menu était
+            purement et simplement inatteignable — les fonds de carte y étaient
+            invisibles. Le clic fonctionne dans les deux cas. */}
+        <div className="relative">
           <button
             type="button"
+            onClick={() => setShowLayerMenu((open) => !open)}
+            aria-expanded={showLayerMenu}
             title={t('map.layers')}
-            className="w-10 h-10 bg-[#16191C] border border-[#2D3034] rounded flex items-center justify-center hover:bg-[#282a2b] transition-colors text-[#e5bdb9] hover:text-[#e2e2e3] shadow-lg"
+            className={`w-10 h-10 border border-[#2D3034] rounded flex items-center justify-center transition-colors shadow-lg ${
+              showLayerMenu
+                ? 'bg-[#282a2b] text-[#e2e2e3]'
+                : 'bg-[#16191C] text-[#e5bdb9] hover:bg-[#282a2b] hover:text-[#e2e2e3]'
+            }`}
           >
             <span className="material-symbols-outlined text-[20px]">layers</span>
           </button>
-          <div className="absolute right-12 bottom-0 hidden group-hover:flex flex-col bg-[#16191C] border border-[#2D3034] rounded p-1 shadow-xl whitespace-nowrap min-w-[120px]">
+          <div
+            className={`absolute right-12 bottom-0 ${
+              showLayerMenu ? 'flex' : 'hidden'
+            } flex-col bg-[#16191C] border border-[#2D3034] rounded p-1 shadow-xl w-[248px] max-w-[calc(100vw-5rem)]`}
+          >
             <button
               type="button"
               onClick={() => onChangeTileLayer('dark')}
@@ -566,6 +754,11 @@ export const InteractiveMap: React.FC<InteractiveMapProps> = ({
             >
               {t('map.layerTerrain')}
             </button>
+
+            {/* La couche satellite rejoint les fonds de carte : même question
+                posée à la carte, même menu. `satelliteControl` est monté par
+                `App`, qui détient l'état de la couche et son compteur. */}
+            {satelliteControl}
           </div>
         </div>
       </div>

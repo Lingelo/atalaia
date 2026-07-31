@@ -10,9 +10,8 @@
 import { SOURCES, type Incident, type ViewScope } from '../types';
 import { resolvePhase } from './status.ts';
 
-/** Les incidents du périmètre demandé. Le périmètre mondial n'en contient aucun. */
+/** Les incidents du périmètre demandé. */
 export function filterByScope(incidents: Incident[], scope: ViewScope): Incident[] {
-  if (scope === 'world') return [];
   if (scope === 'iberia') return incidents;
 
   const country = scope === 'portugal' ? 'PT' : 'ES';

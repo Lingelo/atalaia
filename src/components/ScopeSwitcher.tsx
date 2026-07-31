@@ -22,6 +22,9 @@ interface ScopeSwitcherProps {
  * Castille-et-León en publient — mais de la différence de NATURE entre un
  * sinistre confirmé au sol et une anomalie thermique vue de l'orbite.
  *
+ * ⚠️ Pas d'entrée France, et ce n'est pas un oubli : voir `ViewScope`. Un
+ * périmètre ne peut figurer ici que si un service en publie les sinistres.
+ *
  * ⚠️ Le mode Espagne ne couvre que trois communautés autonomes : il n'existe pas
  * de flux national. L'infobulle le dit, et le bandeau des sources le détaille.
  */
@@ -32,7 +35,6 @@ export const ScopeSwitcher: React.FC<ScopeSwitcherProps> = ({ scope, onChangeSco
     { value: 'iberia', label: t('scope.iberia'), hint: t('scope.iberia.hint') },
     { value: 'portugal', label: t('scope.portugal'), hint: t('scope.portugal.hint') },
     { value: 'spain', label: t('scope.spain'), hint: t('scope.spain.hint') },
-    { value: 'world', label: t('scope.world'), hint: t('scope.world.hint') },
   ];
 
   return (
