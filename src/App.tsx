@@ -7,7 +7,7 @@ import { useWatchZones, useZoneAlerts } from './hooks/useWatchZones';
 import { SatelliteLayerControl } from './components/SatelliteLayerControl';
 import { computeStats, filterByScope } from './lib/scope';
 import { DEFAULT_FILTERS, filterIncidents, hasActiveFilters, type ChipFilter } from './lib/filters';
-import { MobileFilterBar } from './components/MobileFilterBar';
+import { MobileControls } from './components/MobileControls';
 import { resolvePhase } from './lib/status';
 import { InteractiveMap } from './components/InteractiveMap';
 import { IncidentListView } from './components/IncidentListView';
@@ -283,12 +283,13 @@ export default function App() {
               />
             </div>
 
-            {/* Filtres du mobile, posés sur la carte. Ils gouvernent le même
-                état que la liste — voir `MobileFilterBar` pour la raison de
-                leur emplacement. Rendus en frère de la carte, et non dedans :
-                comme le bouton ci-dessous, ils se positionnent par rapport au
-                cadre du tableau de bord. */}
-            <MobileFilterBar
+            {/* Commandes du mobile, posées sur la carte : périmètre, couverture
+                des services, fraîcheur et filtres. C'est la contrepartie de
+                l'en-tête desktop, qui est `hidden md:flex` — voir `MobileControls`
+                pour la raison de leur emplacement. Rendues en frère de la carte
+                et non dedans : comme le bouton ci-dessous, elles se positionnent
+                par rapport au cadre du tableau de bord. */}
+            <MobileControls
               searchTerm={searchTerm}
               onSearchChange={setSearchTerm}
               statusFilter={statusFilter}
@@ -298,6 +299,12 @@ export default function App() {
               availablePhases={availablePhases}
               visibleCount={visibleIncidents.length}
               isFiltered={isFiltered}
+              scope={scope}
+              onChangeScope={setScope}
+              reports={reports}
+              lastUpdatedAt={lastUpdatedAt}
+              isRefreshing={isRefreshing}
+              onRefresh={refresh}
             />
 
             {/* Interrupteur de la liste, mobile uniquement. Masqué quand la liste
