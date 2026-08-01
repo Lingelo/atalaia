@@ -1,4 +1,5 @@
 import React from 'react';
+import { Icon } from './Icon';
 import { ViewTab, ViewScope } from '../types';
 import { formatTimeAgo } from '../lib/time';
 import { useI18n } from '../i18n/context';
@@ -98,9 +99,7 @@ export const NavigationShell: React.FC<NavigationShellProps> = ({
         {/* Nom de l'application. Il vivait dans l'en-tête de la liste des
             sinistres, donc invisible dès qu'on quittait la carte. */}
         <div className="px-4 flex items-center gap-2 shrink-0">
-          <span className="material-symbols-outlined text-[#ffb3ad] text-[22px]">
-            local_fire_department
-          </span>
+          <Icon name="local_fire_department" className="text-[#ffb3ad] text-[22px]" />
           <span className="hidden xl:inline font-['Inter'] text-[17px] font-bold tracking-tight text-[#e2e2e3]">
             {t('app.name')}
           </span>
@@ -132,7 +131,7 @@ export const NavigationShell: React.FC<NavigationShellProps> = ({
                   : 'text-[#e5bdb9] hover:text-[#e2e2e3] hover:bg-[#282a2b]'
               }`}
             >
-              <span className="material-symbols-outlined text-[18px]">{icon}</span>
+              <Icon name={icon} className="text-[18px]" />
               <span className="hidden 2xl:inline">{label}</span>
             </button>
           ))}
@@ -168,11 +167,7 @@ export const NavigationShell: React.FC<NavigationShellProps> = ({
             className="px-3 py-1.5 rounded text-xs font-semibold flex items-center gap-1.5 transition-all bg-[#282a2b] text-[#ffb3ad] hover:bg-[#333536] border border-[#333536] disabled:opacity-60"
             title={t('stats.refreshNow')}
           >
-            <span
-              className={`material-symbols-outlined text-[16px] ${isRefreshing ? 'animate-spin' : ''}`}
-            >
-              {isRefreshing ? 'progress_activity' : 'refresh'}
-            </span>
+            <Icon name={isRefreshing ? 'progress_activity' : 'refresh'} className={`text-[16px] ${isRefreshing ? 'animate-spin' : ''}`} />
             {isRefreshing
               ? t('stats.refreshing')
               : lastUpdatedAt
@@ -196,7 +191,7 @@ export const NavigationShell: React.FC<NavigationShellProps> = ({
             activeTab === 'dashboard' ? 'text-[#ffb3ad]' : 'text-[#e5bdb9] hover:text-[#e2e2e3]'
           }`}
         >
-          <span className="material-symbols-outlined text-[22px]">map</span>
+          <Icon name="map" className="text-[22px]" />
           <span className="font-['Inter'] text-[11px] font-semibold mt-0.5">{t('nav.map')}</span>
         </button>
 
@@ -207,7 +202,7 @@ export const NavigationShell: React.FC<NavigationShellProps> = ({
             activeTab === 'watch-zones' ? 'text-[#ffb3ad]' : 'text-[#e5bdb9] hover:text-[#e2e2e3]'
           }`}
         >
-          <span className="material-symbols-outlined text-[22px]">notifications_active</span>
+          <Icon name="notifications_active" className="text-[22px]" />
           <span className="font-['Inter'] text-[11px] font-semibold mt-0.5">{t('nav.alerts')}</span>
         </button>
       </nav>

@@ -1,4 +1,5 @@
 import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { Icon } from './Icon';
 
 import { SOURCES, type ViewScope } from '../types';
 import type { SourceReport } from '../api/spain/index';
@@ -102,9 +103,7 @@ export const SourceStatusBadge: React.FC<SourceStatusBadgeProps> = ({ reports, s
         }`}
         title={t('sources.title')}
       >
-        <span className="material-symbols-outlined text-[15px]">
-          {hasFailure ? 'error' : 'database'}
-        </span>
+        <Icon name={hasFailure ? 'error' : 'database'} className="text-[15px]" />
         <span className="tabular-nums">
           {t('sources.count', {
             ok: relevant.length - failing.length,

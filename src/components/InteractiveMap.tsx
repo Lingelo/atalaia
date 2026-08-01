@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
+import { Icon } from './Icon';
 import L from 'leaflet';
 import { Incident, WatchZone, MapTileLayer, SatelliteDetection, ViewScope } from '../types';
 import { resolvePhase } from '../lib/status';
@@ -655,7 +656,17 @@ export const InteractiveMap: React.FC<InteractiveMapProps> = ({
       <div ref={mapContainerRef} className="w-full h-full z-0" />
 
       {/* Map Control Buttons Overlay (Bottom Right) */}
-      <div className="absolute bottom-6 right-6 z-[400] flex flex-col gap-2 pointer-events-auto">
+      {/* ⚠️ `bottom-20` sous `md` : la barre de navigation mobile est `fixed
+          bottom-0 h-16` (64 px) en `z-[500]`, tandis que la carte occupe TOUT
+          le cadre (`absolute inset-0` dans App) sans rien lui réserver. À
+          `bottom-6`, le dernier bouton de la pile — celui des calques —
+          s'étendait de 24 à 64 px du bas, donc intégralement RECOUVERT : sur
+          téléphone, les fonds de carte et la couche satellite étaient
+          inatteignables. La pile grandissant vers le haut, seul son dernier
+          élément était touché, ce qui rendait la panne peu visible : le zoom et
+          la géolocalisation, plus hauts, répondaient normalement.
+          80 px = les 64 px de la barre + 16 px de respiration. */}
+      <div className="absolute bottom-20 right-6 md:bottom-6 z-[400] flex flex-col gap-2 pointer-events-auto">
         <div className="flex flex-col bg-[#16191C] border border-[#2D3034] rounded overflow-hidden shadow-lg">
           <button
             type="button"
@@ -663,7 +674,7 @@ export const InteractiveMap: React.FC<InteractiveMapProps> = ({
             title={t('map.zoomIn')}
             className="w-10 h-10 flex items-center justify-center hover:bg-[#282a2b] transition-colors border-b border-[#2D3034] text-[#e5bdb9] hover:text-[#e2e2e3]"
           >
-            <span className="material-symbols-outlined text-[20px]">add</span>
+            <Icon name="add" className="text-[20px]" />
           </button>
           <button
             type="button"
@@ -671,7 +682,7 @@ export const InteractiveMap: React.FC<InteractiveMapProps> = ({
             title={t('map.zoomOut')}
             className="w-10 h-10 flex items-center justify-center hover:bg-[#282a2b] transition-colors text-[#e5bdb9] hover:text-[#e2e2e3]"
           >
-            <span className="material-symbols-outlined text-[20px]">remove</span>
+            <Icon name="remove" className="text-[20px]" />
           </button>
         </div>
 
@@ -694,13 +705,9 @@ export const InteractiveMap: React.FC<InteractiveMapProps> = ({
           title={t('map.locate')}
           className="w-10 h-10 bg-[#16191C] border border-[#2D3034] rounded flex items-center justify-center hover:bg-[#282a2b] transition-colors text-[#e5bdb9] hover:text-[#e2e2e3] shadow-lg disabled:opacity-60"
         >
-          <span
-            className={`material-symbols-outlined text-[20px] ${
-              locateStatus === 'searching' ? 'animate-spin' : ''
-            }`}
-          >
-            {locateStatus === 'searching' ? 'progress_activity' : 'my_location'}
-          </span>
+          <Icon name={locateStatus === 'searching' ? 'progress_activity' : 'my_location'} className={`text-[20px] ${
+ locateStatus === 'searching' ? 'animate-spin' : ''
+ }`} />
         </button>
 
         {/* Tile Layer Switcher */}
@@ -720,7 +727,7 @@ export const InteractiveMap: React.FC<InteractiveMapProps> = ({
                 : 'bg-[#16191C] text-[#e5bdb9] hover:bg-[#282a2b] hover:text-[#e2e2e3]'
             }`}
           >
-            <span className="material-symbols-outlined text-[20px]">layers</span>
+            <Icon name="layers" className="text-[20px]" />
           </button>
           <div
             className={`absolute right-12 bottom-0 ${

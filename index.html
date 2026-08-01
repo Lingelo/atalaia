@@ -25,11 +25,25 @@
     <meta name="twitter:title" content="Atalaia — Wildfires in Portugal and Spain" />
     <meta name="twitter:description" content="Ongoing wildfires in Portugal and Spain, from the civil protection services themselves." />
 
-    <!-- Google Fonts: Inter & Material Symbols Outlined -->
+    <!--
+      Google Fonts : Inter SEULEMENT.
+
+      ⚠️ Material Symbols a été retiré d'ici. La feuille distante ne fournissait
+      pas que la police : elle définissait la classe `.material-symbols-outlined`
+      elle-même. Bloquée ou lente — et fonts.googleapis.com figure dans la
+      plupart des listes de blocage mobiles — les <span> affichaient leur
+      ligature en toutes lettres (« notifications_active » à la place de la
+      cloche), et `display=swap` PROGRAMMAIT cet affichage pendant l'attente.
+      Les icônes sont désormais des tracés SVG embarqués : voir
+      `src/components/Icon.tsx`, qui garde le détail des deux pannes.
+
+      Inter reste distante : une police de TEXTE qui n'arrive pas se remplace
+      proprement par la pile système, sans rien rendre d'illisible. C'est
+      exactement ce que `display=swap` sait bien faire — sur du texte.
+    -->
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Inter:ital,opsz,wght@0,14..32,100..900;1,14..32,100..900&display=swap" rel="stylesheet" />
-    <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet" />
     <!-- Leaflet CSS -->
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
 

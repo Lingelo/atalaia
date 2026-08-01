@@ -1,11 +1,14 @@
 import { useCallback, useState, useMemo } from 'react';
+import { Icon } from './components/Icon';
 import { Incident, ViewTab, MapTileLayer, ViewScope } from './types';
 import { useActiveIncidents } from './hooks/useActiveIncidents';
 import { useSatelliteDetections } from './hooks/useSatelliteDetections';
 import { useWatchZones, useZoneAlerts } from './hooks/useWatchZones';
 import { SatelliteLayerControl } from './components/SatelliteLayerControl';
 import { computeStats, filterByScope } from './lib/scope';
-import { DEFAULT_FILTERS, filterIncidents, type ChipFilter } from './lib/filters';
+import { DEFAULT_FILTERS, filterIncidents, hasActiveFilters, type ChipFilter } from './lib/filters';
+import { MobileFilterBar } from './components/MobileFilterBar';
+import { resolvePhase } from './lib/status';
 import { InteractiveMap } from './components/InteractiveMap';
 import { IncidentListView } from './components/IncidentListView';
 import { IncidentDetailPanel } from './components/IncidentDetailPanel';
@@ -124,6 +127,21 @@ export default function App() {
   );
 
   /**
+   * Phases proposées au filtre, dérivées du PÉRIMÈTRE et non des incidents déjà
+   * filtrés : sinon les options s'évaporent à mesure qu'on s'en sert, et le
+   * dernier choix restant devient une impasse.
+   */
+  const availablePhases = useMemo(
+    () =>
+      Array.from(new Set(incidents.map((inc) => inc.phase))).sort(
+        (a, b) => resolvePhase(b).severity - resolvePhase(a).severity
+      ),
+    [incidents]
+  );
+
+  const isFiltered = useMemo(() => hasActiveFilters(filters), [filters]);
+
+  /**
    * Totaux du périmètre. Voir `computeStats` pour ce qui s'additionne ou non.
    *
    * ⚠️ Calculés sur le périmètre ENTIER, jamais sur le sous-ensemble filtré. Le
@@ -165,7 +183,7 @@ export default function App() {
           une donnée un peu ancienne vaut mieux qu'un écran vide. */}
       {error && (
         <div className="fixed top-4 left-1/2 -translate-x-1/2 z-[1000] bg-[#7f1d1d] text-white px-4 py-2.5 rounded shadow-2xl border border-white/20 text-sm font-semibold flex items-center gap-2">
-          <span className="material-symbols-outlined text-[20px]">cloud_off</span>
+          <Icon name="cloud_off" className="text-[20px]" />
           <span>{error}</span>
           <button
             type="button"
@@ -197,7 +215,7 @@ export default function App() {
             données étaient présentes dès le premier rendu. */}
         {isLoading && (
           <div className="absolute inset-0 z-[600] flex flex-col items-center justify-center gap-3 bg-[#121415] text-[#e5bdb9]">
-            <span className="material-symbols-outlined text-[32px] animate-spin">progress_activity</span>
+            <Icon name="progress_activity" className="text-[32px] animate-spin" />
             <span className="text-sm">{t('loading.incidents')}</span>
           </div>
         )}
@@ -217,8 +235,6 @@ export default function App() {
               onSearchChange={setSearchTerm}
               statusFilter={statusFilter}
               onStatusFilterChange={setStatusFilter}
-              chipFilter={chipFilter}
-              onChipFilterChange={setChipFilter}
               totalStats={totalStats}
               isOpen={isListOpen}
               onClose={() => setIsListOpen(false)}
@@ -242,9 +258,7 @@ export default function App() {
                 aria-expanded={!isListCollapsed}
                 className="hidden md:flex absolute left-0 top-1/2 -translate-y-1/2 z-[400] w-5 h-14 items-center justify-center rounded-r bg-[#16191C] border border-l-0 border-[#2D3034] text-[#e5bdb9] hover:bg-[#282a2b] hover:text-[#e2e2e3] transition-colors shadow-lg"
               >
-                <span className="material-symbols-outlined text-[18px] leading-none">
-                  {isListCollapsed ? 'chevron_right' : 'chevron_left'}
-                </span>
+                <Icon name={isListCollapsed ? 'chevron_right' : 'chevron_left'} className="text-[18px] leading-none" />
               </button>
 
               <InteractiveMap
@@ -269,6 +283,23 @@ export default function App() {
               />
             </div>
 
+            {/* Filtres du mobile, posés sur la carte. Ils gouvernent le même
+                état que la liste — voir `MobileFilterBar` pour la raison de
+                leur emplacement. Rendus en frère de la carte, et non dedans :
+                comme le bouton ci-dessous, ils se positionnent par rapport au
+                cadre du tableau de bord. */}
+            <MobileFilterBar
+              searchTerm={searchTerm}
+              onSearchChange={setSearchTerm}
+              statusFilter={statusFilter}
+              onStatusFilterChange={setStatusFilter}
+              chipFilter={chipFilter}
+              onChipFilterChange={setChipFilter}
+              availablePhases={availablePhases}
+              visibleCount={visibleIncidents.length}
+              isFiltered={isFiltered}
+            />
+
             {/* Interrupteur de la liste, mobile uniquement. Masqué quand la liste
                 est ouverte (elle porte alors son propre bouton de fermeture) et
                 quand un incident est sélectionné, pour ne pas flotter au-dessus
@@ -279,7 +310,7 @@ export default function App() {
                 onClick={() => setIsListOpen(true)}
                 className="md:hidden absolute bottom-20 left-1/2 -translate-x-1/2 z-30 flex items-center gap-2 pl-4 pr-5 py-3 rounded-full bg-[#1e2021] border border-[#3a3d3f] text-[#e2e2e3] shadow-xl active:scale-95 transition-transform"
               >
-                <span className="material-symbols-outlined text-[20px] text-[#ffb3ad]">list</span>
+                <Icon name="list" className="text-[20px] text-[#ffb3ad]" />
                 <span className="font-['Inter'] text-[14px] font-semibold tabular-nums whitespace-nowrap">
                   {t('list.open', { count: visibleIncidents.length })}
                 </span>
