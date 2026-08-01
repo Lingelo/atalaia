@@ -178,7 +178,29 @@ export default function App() {
   };
 
   return (
-    <div className="h-screen w-screen overflow-hidden bg-[#121415] text-[#e2e2e3] flex flex-col relative font-['Inter',sans-serif]">
+    /*
+      ⚠️ `h-dvh`, et surtout PAS `h-screen`.
+
+      `h-screen` vaut `100vh`, et sur mobile `100vh` désigne le GRAND viewport :
+      la hauteur qu'aurait la page si la barre d'URL était rétractée. Tant
+      qu'elle est affichée — c'est-à-dire presque tout le temps sur une page
+      qui ne défile pas — la boîte dépasse l'écran par le bas d'exactement sa
+      hauteur.
+
+      La panne qui en découlait était trompeuse, parce qu'elle ne touchait PAS
+      tout le monde de la même façon : la barre d'onglets est `fixed`, donc
+      ancrée au viewport visible, et restait à sa place ; les commandes de la
+      carte sont `absolute` dans cette boîte trop haute, et passaient sous
+      l'écran. Le bouton des calques disparaissait, la géolocalisation était
+      rognée. Et `overflow-hidden` interdisant de défiler, rien ne permettait
+      d'aller les chercher : l'écran semblait simplement amputé.
+
+      `dvh` suit la hauteur réellement visible, si bien que les deux ancrages
+      se retrouvent d'accord. Invisible en émulation de navigateur, qui ne
+      simule pas la barre d'URL rétractable : cette panne ne se voit que sur un
+      vrai téléphone.
+    */
+    <div className="h-dvh w-full overflow-hidden bg-[#121415] text-[#e2e2e3] flex flex-col relative font-['Inter',sans-serif]">
       {/* Bandeau d'erreur. Les incidents déjà chargés restent affichés dessous :
           une donnée un peu ancienne vaut mieux qu'un écran vide. */}
       {error && (
@@ -281,14 +303,45 @@ export default function App() {
                   />
                 }
               />
+
+              {/* Interrupteur de la liste, mobile uniquement. Masqué quand la
+                  liste est ouverte (elle porte alors son propre bouton de
+                  fermeture) et quand un incident est sélectionné, pour ne pas
+                  flotter au-dessus du panneau de détail.
+
+                  ⚠️ RENDU DANS LE CONTENEUR DE LA CARTE, et non à côté. Il en
+                  était frère, et passait alors AU-DESSUS du menu des calques
+                  qu'il recouvrait en partie. La comparaison qui tranche n'était
+                  pas son `z-30` contre le `z-[400]` du menu, mais son `z-30`
+                  contre le `z-0` du conteneur ci-dessus : celui-ci ouvre un
+                  contexte d'empilement, dont aucun enfant ne peut sortir quelle
+                  que soit sa valeur. Un frère à `z-30` passe donc devant TOUT
+                  ce que la carte contient.
+
+                  Ce `z-0` est porteur — c'est lui qui empêche les commandes de
+                  la carte de chevaucher le panneau de détail (voir plus haut).
+                  On ne le retire donc pas : on fait entrer le bouton dans le
+                  même contexte, où `z-30` et `z-[400]` se comparent enfin
+                  directement. Sur mobile le conteneur est `absolute inset-0`,
+                  soit exactement le cadre précédent : rien ne bouge à l'écran. */}
+              {!isListOpen && !selectedIncident && (
+                <button
+                  type="button"
+                  onClick={() => setIsListOpen(true)}
+                  className="md:hidden absolute bottom-20 left-1/2 -translate-x-1/2 z-30 flex items-center gap-2 pl-4 pr-5 py-3 rounded-full bg-[#1e2021] border border-[#3a3d3f] text-[#e2e2e3] shadow-xl active:scale-95 transition-transform"
+                >
+                  <Icon name="list" className="text-[20px] text-[#ffb3ad]" />
+                  <span className="font-['Inter'] text-[14px] font-semibold tabular-nums whitespace-nowrap">
+                    {t('list.open', { count: visibleIncidents.length })}
+                  </span>
+                </button>
+              )}
             </div>
 
             {/* Commandes du mobile, posées sur la carte : périmètre, couverture
                 des services, fraîcheur et filtres. C'est la contrepartie de
                 l'en-tête desktop, qui est `hidden md:flex` — voir `MobileControls`
-                pour la raison de leur emplacement. Rendues en frère de la carte
-                et non dedans : comme le bouton ci-dessous, elles se positionnent
-                par rapport au cadre du tableau de bord. */}
+                pour la raison de leur emplacement. */}
             <MobileControls
               searchTerm={searchTerm}
               onSearchChange={setSearchTerm}
@@ -306,23 +359,6 @@ export default function App() {
               isRefreshing={isRefreshing}
               onRefresh={refresh}
             />
-
-            {/* Interrupteur de la liste, mobile uniquement. Masqué quand la liste
-                est ouverte (elle porte alors son propre bouton de fermeture) et
-                quand un incident est sélectionné, pour ne pas flotter au-dessus
-                du panneau de détail. */}
-            {!isListOpen && !selectedIncident && (
-              <button
-                type="button"
-                onClick={() => setIsListOpen(true)}
-                className="md:hidden absolute bottom-20 left-1/2 -translate-x-1/2 z-30 flex items-center gap-2 pl-4 pr-5 py-3 rounded-full bg-[#1e2021] border border-[#3a3d3f] text-[#e2e2e3] shadow-xl active:scale-95 transition-transform"
-              >
-                <Icon name="list" className="text-[20px] text-[#ffb3ad]" />
-                <span className="font-['Inter'] text-[14px] font-semibold tabular-nums whitespace-nowrap">
-                  {t('list.open', { count: visibleIncidents.length })}
-                </span>
-              </button>
-            )}
 
             {/* Right Sliding Detail Panel (Opens when an incident is selected) */}
             {selectedIncident && (
