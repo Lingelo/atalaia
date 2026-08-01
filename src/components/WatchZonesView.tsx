@@ -1,4 +1,5 @@
 import React, { useMemo, useState } from 'react';
+import { Icon } from './Icon';
 import { useI18n } from '../i18n/context';
 import { Incident, WatchZone, MapTileLayer } from '../types';
 import { distanceKm } from '../lib/geo';
@@ -121,7 +122,7 @@ export const WatchZonesView: React.FC<WatchZonesViewProps> = ({
               promesse est faite. */}
           {notificationPermission === 'granted' && (
             <p className="font-['Inter'] text-[12px] leading-snug text-[#e5bdb9]/80 flex items-start gap-2">
-              <span className="material-symbols-outlined text-[16px] shrink-0">info</span>
+              <Icon name="info" className="text-[16px] shrink-0" />
               {t('watch.notifTabOnly')}
             </p>
           )}
@@ -129,7 +130,7 @@ export const WatchZonesView: React.FC<WatchZonesViewProps> = ({
           {/* Browser Notification Banner */}
           {notificationPermission !== 'granted' && (
             <div className="bg-[#282a2b] p-3 rounded border border-[#333536] flex items-start gap-3">
-              <span className="material-symbols-outlined text-[#ffb3ad] mt-0.5">notifications_active</span>
+              <Icon name="notifications_active" className="text-[24px] text-[#ffb3ad] mt-0.5" />
               <div className="flex-1">
                 <p className="font-['Inter'] text-[14px] font-semibold text-[#e2e2e3]">
                   {t('watch.notifDisabled')}
@@ -161,7 +162,7 @@ export const WatchZonesView: React.FC<WatchZonesViewProps> = ({
               {/* Radius Icon Thumbnail */}
               <div className="w-14 h-14 rounded border border-[#333536] flex-shrink-0 relative overflow-hidden bg-[#0c0e0f] flex items-center justify-center">
                 <div className="w-10 h-10 border border-[#ffb3ad] rounded-full bg-[#ffb3ad]/15 flex items-center justify-center">
-                  <span className="material-symbols-outlined text-[16px] text-[#ffb3ad]">radar</span>
+                  <Icon name="radar" className="text-[16px] text-[#ffb3ad]" />
                 </div>
               </div>
 
@@ -222,7 +223,7 @@ export const WatchZonesView: React.FC<WatchZonesViewProps> = ({
                   className="p-1 text-[#e5bdb9] hover:text-[#ef4444] transition-colors"
                   title={t('watch.delete')}
                 >
-                  <span className="material-symbols-outlined text-[18px]">delete</span>
+                  <Icon name="delete" className="text-[18px]" />
                 </button>
               </div>
             </div>
@@ -270,9 +271,7 @@ export const WatchZonesView: React.FC<WatchZonesViewProps> = ({
                   : '#333536',
               }}
             >
-              <span className="material-symbols-outlined text-[#fff2f1] text-[20px]">
-                {nearest ? 'local_fire_department' : 'check_circle'}
-              </span>
+              <Icon name={nearest ? 'local_fire_department' : 'check_circle'} className="text-[#fff2f1] text-[20px]" />
             </div>
             <div className="min-w-0">
               <div className="flex justify-between items-baseline gap-2 mb-0.5">

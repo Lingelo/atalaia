@@ -1,4 +1,5 @@
 import React, { useMemo, useState } from 'react';
+import { Icon } from './Icon';
 import { Incident } from '../types';
 import { formatDateTime } from '../lib/time';
 import { resolvePhase } from '../lib/status';
@@ -149,7 +150,7 @@ export const IncidentDetailPanel: React.FC<IncidentDetailPanelProps> = ({
             aria-label={t('detail.close')}
             className="p-1 text-[#e5bdb9] hover:text-[#e2e2e3] hover:bg-[#333536] rounded transition-colors"
           >
-            <span className="material-symbols-outlined">close</span>
+            <Icon name="close" className="text-[24px]" />
           </button>
         </div>
 
@@ -414,7 +415,7 @@ export const IncidentDetailPanel: React.FC<IncidentDetailPanelProps> = ({
             onClick={handleShare}
             className="flex-1 py-2.5 px-3 bg-[#282a2b] hover:bg-[#333536] text-[#e2e2e3] font-['Inter'] text-[14px] rounded flex items-center justify-center gap-2 transition-colors border border-[#333536]"
           >
-            <span className="material-symbols-outlined text-[18px]">share</span>
+            <Icon name="share" className="text-[18px]" />
             {t('detail.share')}
           </button>
           <button
@@ -422,7 +423,7 @@ export const IncidentDetailPanel: React.FC<IncidentDetailPanelProps> = ({
             onClick={() => onFocusOnMap(incident)}
             className="flex-1 py-2.5 px-3 bg-[#282a2b] hover:bg-[#333536] text-[#e2e2e3] font-['Inter'] text-[14px] rounded flex items-center justify-center gap-2 transition-colors border border-[#333536]"
           >
-            <span className="material-symbols-outlined text-[18px]">my_location</span>
+            <Icon name="my_location" className="text-[18px]" />
             {t('detail.viewOnMap')}
           </button>
         </div>
@@ -435,9 +436,15 @@ export const IncidentDetailPanel: React.FC<IncidentDetailPanelProps> = ({
               : 'bg-white text-black hover:bg-gray-200'
           }`}
         >
-          <span className="material-symbols-outlined text-[18px] material-symbols-filled">
-            {incident.isFollowing ? 'notifications_active' : 'notifications'}
-          </span>
+          {/* Variante PLEINE : ce bouton porte un engagement (« je suis cette
+              zone »), et la cloche pleine le dit d'un coup d'œil là où le
+              contour se lit comme un réglage parmi d'autres. Auparavant obtenu
+              par la classe `.material-symbols-filled`, qui poussait l'axe FILL
+              de la police variable ; en SVG, c'est un tracé distinct. */}
+          <Icon
+            name={incident.isFollowing ? 'notifications_active_filled' : 'notifications_filled'}
+            className="text-[18px]"
+          />
           {incident.isFollowing ? t('detail.following') : t('detail.follow')}
         </button>
       </footer>

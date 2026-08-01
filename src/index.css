@@ -30,11 +30,6 @@
   scrollbar-width: none;
 }
 
-/* Material symbols filled variations */
-.material-symbols-filled {
-  font-variation-settings: 'FILL' 1, 'wght' 400, 'GRAD' 0, 'opsz' 24;
-}
-
 /* Leaflet dark theme tweaks */
 .leaflet-container {
   background-color: #0b0d0e !important;

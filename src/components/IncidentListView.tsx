@@ -1,11 +1,12 @@
 import React, { useState } from 'react';
+import { Icon, type IconName } from './Icon';
 import { Incident, SOURCES } from '../types';
 import { formatDateTime, formatTimeAgo } from '../lib/time';
 import { resolvePhase } from '../lib/status';
 import { useI18n } from '../i18n/context';
 import { useIsDesktop } from '../hooks/useIsDesktop';
 import type { TranslationKey } from '../i18n/pt';
-import { ONGOING_FILTER, type ChipFilter } from '../lib/filters';
+import { ONGOING_FILTER } from '../lib/filters';
 
 interface IncidentListViewProps {
   incidents: Incident[];
@@ -15,9 +16,9 @@ interface IncidentListViewProps {
   onSearchChange: (term: string) => void;
   statusFilter: string;
   onStatusFilterChange: (status: string) => void;
-  /** Filtre rapide mobile. Piloté par `App`, pour que la carte le suive aussi. */
-  chipFilter: ChipFilter;
-  onChipFilterChange: (chip: ChipFilter) => void;
+  /* Le filtre rapide n'est plus reçu ici : il a migré vers `MobileFilterBar`.
+     `App` en reste le propriétaire, et la liste en subit toujours l'effet —
+     elle consomme `visibleIncidents`, déjà filtré. */
   /** Mobile uniquement : la liste est-elle dépliée ? Ignoré à partir de `md`. */
   isOpen: boolean;
   onClose: () => void;
@@ -53,7 +54,7 @@ interface IncidentListViewProps {
  * l'effectif reste inconnu. Le nombre est donc un plancher, pas un total.
  */
 const Metric: React.FC<{
-  icon: string;
+  icon: IconName;
   value: number | null;
   title: string;
   partial?: boolean;
@@ -62,9 +63,7 @@ const Metric: React.FC<{
 
   return (
     <div className="flex items-center gap-1" title={title}>
-      <span className={`material-symbols-outlined text-[16px] ${dimmed ? 'opacity-40' : ''}`}>
-        {icon}
-      </span>
+      <Icon name={icon} className={`text-[16px] ${dimmed ? 'opacity-40' : ''}`} />
       {value === null ? (
         <span className="opacity-40">—</span>
       ) : (
@@ -84,8 +83,6 @@ export const IncidentListView: React.FC<IncidentListViewProps> = ({
   onSearchChange,
   statusFilter,
   onStatusFilterChange,
-  chipFilter,
-  onChipFilterChange,
   isOpen,
   onClose,
   isCollapsed,
@@ -180,13 +177,17 @@ export const IncidentListView: React.FC<IncidentListViewProps> = ({
           onClick={onClose}
           className="flex items-center gap-1 px-3 py-1.5 -mr-2 rounded text-[#e2e2e3] hover:bg-[#333536] transition-colors"
         >
-          <span className="material-symbols-outlined text-[20px]">keyboard_arrow_down</span>
+          <Icon name="keyboard_arrow_down" className="text-[20px]" />
           <span className="font-['Inter'] text-[13px] font-semibold">{t('list.close')}</span>
         </button>
       </div>
 
-      {/* Search Input and Filters Toggle Bar */}
-      <div className="p-3 border-b border-[#2D3034] bg-[#16191C] flex flex-col gap-2">
+      {/* Recherche et filtres — DESKTOP uniquement.
+          Sur mobile, `MobileFilterBar` porte exactement les mêmes commandes,
+          en haut de la carte et visible en permanence. Les garder ici aussi
+          donnerait deux boutons « Filtres » pilotant le même état, à deux
+          endroits, dont l'un n'est atteignable qu'en recouvrant la carte. */}
+      <div className="hidden md:flex p-3 border-b border-[#2D3034] bg-[#16191C] flex-col gap-2">
         <div className="flex gap-2">
           <div className="flex-1 relative">
             {/* ⚠️ Centrage CALCULÉ, et non un `top` en dur. La glyphe Material
@@ -199,9 +200,7 @@ export const IncidentListView: React.FC<IncidentListViewProps> = ({
                 `pointer-events-none` : sans lui, cliquer la loupe — le geste le
                 plus naturel — ne donnait pas le focus au champ. */}
             <span className="pointer-events-none absolute left-2.5 top-0 h-full flex items-center">
-              <span className="material-symbols-outlined leading-none text-[#e5bdb9] text-[18px]">
-                search
-              </span>
+              <Icon name="search" className="leading-none text-[#e5bdb9] text-[18px]" />
             </span>
             <input
               type="text"
@@ -225,7 +224,7 @@ export const IncidentListView: React.FC<IncidentListViewProps> = ({
                 : 'border-[#494c4f] text-[#e5bdb9] hover:bg-[#2D3034]'
             }`}
           >
-            <span className="material-symbols-outlined text-[16px]">tune</span>
+            <Icon name="tune" className="text-[16px]" />
             {t('list.filters')}
           </button>
         </div>
@@ -274,30 +273,12 @@ export const IncidentListView: React.FC<IncidentListViewProps> = ({
           </div>
         )}
 
-        {/* Mobile Quick Chips */}
-        <div className="md:hidden flex gap-2 overflow-x-auto no-scrollbar pt-1">
-          {(
-            [
-              ['all', t('list.all')],
-              ['> 100 Ops', t('list.chipOver100')],
-              ['Aerial Assets', t('list.chipAerial')],
-              ['Resolution', t('list.chipOngoing')],
-            ] as const
-          ).map(([chip, chipLabel]) => (
-            <button
-              key={chip}
-              type="button"
-              onClick={() => onChipFilterChange(chip)}
-              className={`h-7 px-3 rounded text-xs whitespace-nowrap flex items-center transition-colors ${
-                chipFilter === chip
-                  ? 'bg-[#e2e2e3] text-[#121415] font-bold'
-                  : 'bg-transparent border border-[#333536] text-[#e5bdb9]'
-              }`}
-            >
-              {chipLabel}
-            </button>
-          ))}
-        </div>
+        {/* ⚠️ Les filtres rapides ne sont plus ici. Ils étaient `md:hidden`,
+            donc réservés au mobile — c'est-à-dire au seul cas où cette feuille
+            recouvre 72 % de la carte qu'ils sont censés restreindre. Ils vivent
+            désormais dans `MobileFilterBar`, posée en haut de la carte et
+            visible même feuille ouverte. Ils pilotent le même `chipFilter` :
+            c'est un déménagement, pas un doublon. */}
       </div>
 
       {/* Incident List */}
