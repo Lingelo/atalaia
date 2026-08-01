@@ -10,6 +10,27 @@ interface SourceStatusBadgeProps {
   scope: ViewScope;
 }
 
+/** Services concernant le périmètre affiché. Les autres ne le qualifient pas. */
+export function reportsForScope(reports: SourceReport[], scope: ViewScope): SourceReport[] {
+  return reports.filter((report) => {
+    if (scope === 'iberia') return true;
+    const country = SOURCES[report.source].country;
+    return scope === 'portugal' ? country === 'PT' : country === 'ES';
+  });
+}
+
+/**
+ * Un service du périmètre est-il injoignable ?
+ *
+ * Exporté parce que le mobile en a besoin AILLEURS qu'ici : les commandes y
+ * sont repliées derrière un bouton unique, et l'alerte doit rester lisible sans
+ * l'ouvrir. Dupliquer ce filtrage aurait laissé les deux versions diverger — et
+ * c'est précisément le signal qu'on ne peut pas se permettre de rater.
+ */
+export function hasScopeFailure(reports: SourceReport[], scope: ViewScope): boolean {
+  return reportsForScope(reports, scope).some((report) => !report.ok);
+}
+
 /**
  * Couverture réelle du périmètre affiché.
  *
@@ -78,11 +99,7 @@ export const SourceStatusBadge: React.FC<SourceStatusBadgeProps> = ({ reports, s
 
   if (reports.length === 0) return null;
 
-  const relevant = reports.filter((report) => {
-    if (scope === 'iberia') return true;
-    const country = SOURCES[report.source].country;
-    return scope === 'portugal' ? country === 'PT' : country === 'ES';
-  });
+  const relevant = reportsForScope(reports, scope);
 
   if (relevant.length === 0) return null;
 
